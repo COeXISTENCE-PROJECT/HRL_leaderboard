@@ -37,16 +37,34 @@ from routerl import Keychain as kc
 
 ####################################   OBSERVATION AND Q-NETWORK IMPLEMENTATION   #####################################################
 
+
 ###############################
 # Global observation
 ################################
-class GlobalObservation():
+class GlobalObservation:
     """
-    A class for storing and managing global observation for machine agents routing decisions.
+    Store and manage global observation state from the AV fleet perspective.
+
+    This class stores and manages global observation table (as a pd.DataFrame),
+    that tracks the state of all AV agents in the environment.
+    Table fields include: agent start time, origin, destination, chosen route, travel time, completion status.
+
+
+    Key responsibilities:
+        - Maintain agents’ data in a pd.DataFrame of shape (num_agents x num_features).
+        - Keep track on the currently departing agent.
+        - Update the global observation table every environment timestep based on
+          information from the TrafficEnvironment.
+        - Provide each agent with a view of the global state from the perspective
+          of their start time.
     """
+
+
+    ##############################
+    ### Initialization & reset ###
     def __init__(self, agents: list[BaseAgent])->None:
 
-        # Columns in observation table & default values for representing empty data
+        # Columns in state table & default values for representing empty data
         self.features = {
             'start_time': -1,
             'origin': -1,
@@ -58,50 +76,16 @@ class GlobalObservation():
             #'is_acting': 0, #<- kept in self.acting_agent_id and appended only when generating agent's observation
         }
 
-        self._initialize_observation_table(agents)
-        self.finished = False
+        self.state_table = self._initialize_state_table(agents)
         self.acting_agent_id = None
 
-
-    def _assert_agents_time_sorted(self, agents: list[BaseAgent])->None:
-        """
-        Check that the list of agents is sorted by start time in non-descending order.
-        """
-
-        if len(agents) <2:
-            return
-        for i in range(1,len(agents)):
-            assert agents[i-1].start_time <= agents[i].start_time, f"i={i}; Agent_{i-1} ({agents[i-1].kind} {agents[i-1].id}) start_time: {agents[i-1].start_time}, Agent_{i}  ({agents[i].kind} {agents[i].id})start_time: {agents[i].start_time}"
-        return
-
-    def _initialize_observation_table(self, agents: list[BaseAgent] )->None:
-        """
-        Initialize observation table.
-        Set row indices to agent IDs (integers) sorted by start times. Set column names to self.features.
-        Fill columns with default values for each feature.
-
-        Args:
-            agents (list[BaseAgent]): list of agents to be included in the global observation table.
-
-        Returns:
-            None
-        """
-
-        idx_time_sorted = [agent.id for agent in sorted(agents, key=lambda x: x.start_time)] # note: some permutations on agents with equal start times - here or somwhere else?
-        #self._assert_agents_time_sorted(agents)
-
-        empty_data = {
-            key: [value] * len(idx_time_sorted)
-            for key, value in self.features.items()
-        }
-        self.observation_table = pd.DataFrame(empty_data, index=idx_time_sorted)
-        return
+        self.episode_finished = False
 
     def reset(self)->None:
         """
         Reset the global observation:
-            - Fill observation table (pd.DataFrame of shape=(n_machine_agents,n_features)) with default values for each feature column.
-            - Set self.agents_finished flag to False.
+            - Fill state table (pd.DataFrame of shape=(n_machine_agents,n_features)) with default values for each feature column.
+            - Set self.episode_finished flag to False.
             - Set currently acting agent to None.
 
         Args:
@@ -110,71 +94,106 @@ class GlobalObservation():
             None
         """
         # Fill columns with default empty values for columns
-        self.observation_table[:] = pd.DataFrame(self.features, index=self.observation_table.index) # note: add permuting agents with the same start times here or somwhere else (e.g. compare _initialize_observation_table)
+        self.state_table[:] = pd.DataFrame(self.features, index=self.state_table.index) # note: add permuting agents with the same start times here or somwhere else (e.g. compare _initialize_state_table)
         self.acting_agent_id = None
-        self.agents_finished = False 
+        self.episode_finished = False 
         return
 
-    def _get_unfinished_agents_ids(self):
+    def _initialize_state_table(self, agents: list[BaseAgent] )->None:
         """
-        Get IDs of the agents that started but not yet finished their drives according to the current status of the observation table.
+        Initialize state table.
+        Set row indices to agent IDs (integers) sorted by start times. Set column names as in self.features.
+        Fill with default values for each column.
+
+        Args:
+            agents (list[BaseAgent]): list of agents to be included in the global state table.
+
+        Returns:
+            pd.DataFrame
         """
-        df = self.observation_table
-        return df.index[df['is_known'] & ~df['has_finished']]
 
-    def update_recently_finished_machines(self, env: TrafficEnvironment)->None:
+        idx_time_sorted = [agent.id for agent in sorted(agents, key=lambda x: x.start_time)] # note: some permutations on agents with equal start times can be added
+
+        empty_columns = {
+            key: [value] * len(idx_time_sorted)
+            for key, value in self.features.items()
+        }
+
+        return pd.DataFrame(empty_columns, index=idx_time_sorted)
+
+
+    ##################################
+    ### Registering starting agent ###
+
+    def register_starting_agent(self, agent: BaseAgent)->None:
         """
-        Update observation table with current state of the environment  => update agents finished from the last update -> their 'is_finished' indicators and travel times.
-        """
-
-        # Get travel times from agents that finished after the last snapshot
-        unfinished_agents = self._get_unfinished_agents_ids() # <- Agents that was active in the last snapshot (integer IDs)
-        finished_agents_times = { # <- Agents that finished after last snapshot
-            info[kc.AGENT_ID] : info[kc.TRAVEL_TIME]
-            for info in env.travel_times_list
-            if info[kc.AGENT_ID] in unfinished_agents and
-            kc.TRAVEL_TIME in info and 
-            info[kc.TRAVEL_TIME] != self.features['travel_time'] # check if assigned travel time is not 'empty value'
-        } 
-
-        # Update observation table with finished agents info
-        self.observation_table['travel_time'].update(pd.Series(finished_agents_times))
-        self.observation_table['has_finished'].update(pd.Series({agent: 1 for agent in finished_agents_times}))
-
-        if self.observation_table['has_finished'].all():
-            self.finished = True
-        return 
-
-
-
-    ####### Agent-related methods #######
-
-    def add_agent(self, agent: BaseAgent)->None:
-        """
-        Add agent information to the observation table to a row indexed with agent ID.
-        Move acting agent indicator to the added agent.
+        Add start time, origin and destination to agent row.
+        Move acting agent indicator to this agent.
 
         Args:
             agent (BaseAgent): An agent whose info is to be added.
         Returns:
             None
         """
-        assert self.observation_table.at[agent.id, 'is_known'] == 0, "Trying to overwrite information for known agent"
-        self.observation_table.loc[agent.id, ['start_time', 'origin', 'destination']] = [agent.start_time, agent.origin, agent.destination]
-        self.observation_table.at[agent.id, 'is_known'] = 1
+
+        assert agent.id in self.state_table.index
+        assert self.state_table.at[agent.id, 'is_known'] == 0, "Trying to overwrite information for known (already registered) agent"
+
+        # Check that agents are sorted by travel time and added in this order (-> start time in prev row is defined and not greater than current)
+        idx_iloc = self.state_table.index.get_loc(agent.id)
+        col = 'start_time'
+        assert (idx_iloc == 0) or (self.state_table.iloc[idx_iloc-1][col] != self.features[col] and self.state_table.iloc[idx_iloc-1][col] <= agent.start_time)
+        
+
+        # Register agent
+        self.state_table.at[agent.id, 'is_known'] = 1
+        self.state_table.loc[agent.id, ['start_time', 'origin', 'destination']] = [agent.start_time, agent.origin, agent.destination]
         self.acting_agent_id = agent.id
         return
 
-    def add_agent_action(self, agent_id: int, action: int)->None:
+    def register_starting_agent_action(self, agent_id: int, action: int)->None:
         """
-        Add action value (route identifier) to 'route' column in agent's row.
+        Add action value (route identifier) to 'route' column for currently acting agent.
         """
         assert agent_id == self.acting_agent_id
-        self.observation_table.at[agent_id, 'route'] = action
+        self.state_table.at[agent_id, 'route'] = action
         return
 
-    def get_agent_feature(self, agent_id: int, feature: str)->Any:
-        return self.observation_table.at[agent_id, feature]
+
+    ################################
+    ### Updates from environment ###
+
+    def update_state_with_recently_finished_machines(self, env: TrafficEnvironment)->None:
+        """
+        Update the global observation table with changes since the last environment snapshot.
+
+        Specifically:
+            - register travel times for agents that have finished their trips,
+            - set the 'has_finished' indicators for those agents.
+        """ 
+
+        # Get travel times for recently finished agents
+        active_agents = self.get_active_agents() # <- IDs of agents that were active in the last snapshot of the observation
+        finished_agents_times = { # <- Agents that finished after last snapshot - according to update from TrafficEnvironment
+            info[kc.AGENT_ID] : info[kc.TRAVEL_TIME]
+            for info in env.travel_times_list
+            if
+                info[kc.AGENT_ID] in active_agents and
+                kc.TRAVEL_TIME in info and 
+                info[kc.TRAVEL_TIME] != self.features['travel_time'] # check if assigned travel time is not 'empty value'
+        } 
+
+        # Update state table
+        self.state_table['travel_time'].update(pd.Series(finished_agents_times))
+        self.state_table['has_finished'].update(pd.Series({agent: 1 for agent in finished_agents_times}))
+
+        if self.state_table['has_finished'].all():
+            self.episode_finished = True
+        return 
+
+
+    #######################################
+    ### Agent view of global obsevation ###
 
     def generate_agent_observation(self, agent_id: int)->np.ndarray:
         """
@@ -184,65 +203,90 @@ class GlobalObservation():
         Adds a one-hot column indicating agent as currently acting.
 
         Args:
-            agent_id (int): The unique identifier of the agent for whom the observation is generated (agent.id).
+            agent_id (int): identifier of the agent for whom the observation is generated (agent.id).
         Returns:
-            np.ndarray: A NumPy array representing the agent’s view of the global observation, preserving original column order
-                with an additional one-hot column containing a 1 in the row corresponding to the acting agent added as a last column.
+            np.ndarray: a NumPy array representing the agent’s view of the global observation, preserving original column order
+            with an additional one-hot column containing a 1 in the row corresponding to the acting agent.
         """
 
-        # Ensure that agent ID in observation table index (for int vs str(int) matching)
-        assert agent_id in self.observation_table.index, f"agent_id: {agent_id} (type: {type(agent_id)})\nobservation_table_index: {self.observation_table.index}"
-        
-        # Check that agents in the global observation table are ordered by start time
-        assert self._is_column_prefix_sorted(self.observation_table, colname='start_time', empty_val=-1), f"'start_time' column is not sorted in non-descending order! Possibly contains empty values for earlier agents.\nTable: {self.observation_table}"
-        # Optionally: ensure that there no data in rows 'below' agent in the table (assumed for current implementation, future agents may be also considered in next implementations)
-        
-        # Get observation table view for the agent
-        obs = self.observation_table.copy()
+ 
+        assert agent_id in self.state_table.index
+        assert agent_id == self.acting_agent_id
+
+        #######################################################################################################################################################################
+        # Potential more sanity checks to perform (when ensuring corectness after changes; swithed off for efficiency)
+        #   - check if agent travel_times are sorted: assert self._is_column_nondescending(colname='start_time')
+        #   - optionally: check if all rows below current agent are filled with empty vals (assumed in current version; scheduled future agents may be added in next versions)
+        #######################################################################################################################################################################
+
+
+        # Get agent's view of state table
+        obs = self.state_table.copy()
         obs['is_acting'] = 0
         obs.at[agent_id, 'is_acting'] = 1
-        return obs.to_numpy().flatten()
+
+        return obs.to_numpy()
+
+    def get_flattened_agent_observation(self, agent_id: int)->np.ndarray:
+        return self.generate_agent_observation(agent_id).flatten()
 
 
+    #################################
+    ####### Auxiliary methods #######
 
-
-    ####### Helper methods #######
-
-    def _is_column_prefix_sorted(self, df: pd.DataFrame, colname: str, empty_val:Any)->bool:
+    ### Accessing state table info ###
+    @property
+    def num_table_columns(self)->int:
+        return len(self.features) + 1 # features + 'is_acting' column
+    
+    def get_active_agents(self):
         """
-        Check if all non-empty values of data frame column are contained in column prefix (not mixed with empty values)
-        and sorted in a non-descending order.
+        Get IDs of agents that are marked as 'started' but not 'finished' in the observation table.
+        """
+        df = self.state_table
+        return df.index[df['is_known'] & ~df['has_finished']]
 
-        Args:
-            df (pd.DataFrame): DataFrame to be checked.
-            colname (str): Name of the DataFrame column to be checked.
-            empty_value (Any): Value representing empty data.
-        Returns:
-            bool: True if the column is in the form: [nonempty_values_nondesc] + [empty_values], False otherwise.
+    def get_agent_feature(self, agent_id: int, feature: str)->Any:
+        return self.state_table.at[agent_id, feature]
+
+
+    ### Checking correctness ###
+    def _is_column_nondescending(self, colname: str)->bool:
+        """
+        Check if state table column is sorted in non-descending order.
+        Ignore suffix filled with default empty values.
         """
 
-        # Get column values and empty vals indices
-        col = df[colname]
-        values = col.to_numpy()
-        empty_ilocs, = np.where(values == empty_val)
+        # Get column and default value; raises error if column not present
+        col = self.state_table[colname]
+        default_val = self.features[colname]
 
-
-        # Get column prefix containing all nonempty values (early escape with False if empty values mixed with nonempty values)
-        if len(empty_ilocs) > 0:
-            first_empty_iloc = empty_ilocs[0]
-
-            # Check if no empty value between nonempty values (if so, return False)
-            if not np.all(values[first_empty_iloc:]==empty_val): 
-                return False
-            column_prefix = values[:first_empty_iloc] 
-        else:
-            column_prefix = values
-
-        
-        if len(column_prefix) <2:
+        if len(col) <= 1:
             return True
+
+
+        # Verify if empty and nonempty values are not mixed; get non-empty prefix
+        isempty_mask = col.eq(default_val)
+        if isempty_mask.any():
+
+            first_empty = isempty_mask.idxmax()  # index of first True ( True is argmax in T/F boolean series) occurence
+
+            # Check that all values after first empty are also empty
+            clean_suffix = isempty_mask.loc[first_empty:].all()
+            if not clean_suffix:
+                return False
+            
+            # Get prefix
+            prefix = col.iloc[:first_empty]
+
+        else:
+            prefix = col
+
+        is_nondesc = (prefix.diff().iloc[1:] >= 0).all()  # drop NaN for first row
+        return is_nondesc
+
+
         
-        return np.all(column_prefix[:-1] <= column_prefix[1:]) # compare elements with their right neigbours
 
 
 
@@ -252,23 +296,45 @@ class GlobalObservation():
 
 ### Simplified single-DQN implementation for single-step decision-making
 class DQN(BaseLearningModel):
-    def __init__(self, state_size, action_space_size,
-                 device="cpu", eps_init=0.99, eps_decay=0.998,
-                 buffer_size=256, batch_size=16, lr=0.003, 
-                 num_epochs=1, num_hidden=2, widths=[32, 64, 32]):
-        ##raise NotImplementedError
+    """
+    DQN structure:
+        - predicting network
+        - replay buffer
+        - 
+    """
+    def __init__(self,
+                state_size,
+                action_space_size,
+                device="cpu",
+                eps_init=0.99,
+                eps_decay=0.998,
+                buffer_size=256, 
+                batch_size=16, 
+                lr=0.003, 
+                num_epochs=1, 
+                num_hidden=2, 
+                widths=[32, 64, 32]):
+
         super().__init__()
         self.device = device
-        self.action_space_size = action_space_size
-        self.epsilon = eps_init
-        self.eps_decay = eps_decay
-        self.memory = deque(maxlen=buffer_size)
-        self.batch_size = batch_size
-        self.num_epochs = num_epochs
 
+        # Q-network
         self.q_network = Network(state_size, action_space_size, num_hidden, widths).to(self.device)
+        self.action_space_size = action_space_size
+
+        # Replay buffer
+        self.memory = deque(maxlen=buffer_size)
+
+        # Behavior policy
+        self.epsilon = eps_init
+        self.epsilon_decay = eps_decay
+
+        # Training 
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=lr)
         self.loss_fn = nn.MSELoss()
+
+        self.batch_size = batch_size
+        self.num_epochs = num_epochs
 
         self.loss = list()
 
@@ -289,14 +355,22 @@ class DQN(BaseLearningModel):
         """
         Add (s,a,r) tuple to the buffer.
         """
-        # All interactions are single-step, so we only store the last state, action, and reward
-        self.memory.append((state, action, reward))
+        self.memory.append((state, action, reward)) # All interactions are single-step, so we only store the last state, action, and reward
         return
 
     def learn(self):
-        if len(self.memory) < self.batch_size: return
+        """
+        Update network parameters.
+        """
+
+        # Skip learning if not enough data in the buffer to form a batch
+        if len(self.memory) < self.batch_size:
+            return
+
         step_loss = list()
         for _ in range(self.num_epochs):
+
+            # Get batch of states, actions and rewards
             batch = random.sample(self.memory, self.batch_size)
             states, actions, rewards = zip(*batch)
             states_tensor = torch.FloatTensor(states).to(self.device)
@@ -307,16 +381,18 @@ class DQN(BaseLearningModel):
             current_q_values = self.q_network(states_tensor).gather(1, actions_tensor)
             target_q_values = rewards_tensor
 
+            # Backpropagate & optimize
             loss = self.loss_fn(current_q_values, target_q_values)
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
             step_loss.append(loss.item())
+
         self.loss.append(sum(step_loss)/len(step_loss))
         self.decay_epsilon()
 
     def decay_epsilon(self):
-        self.epsilon *= self.eps_decay
+        self.epsilon *= self.epsilon_decay
 
 
 class Network(nn.Module):
@@ -342,7 +418,7 @@ class Network(nn.Module):
 
 
 
-# Main script to run the DQN experiment
+# Main script to run the centralized DQN experiment
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--id', type=str, required=True)
@@ -353,6 +429,7 @@ if __name__ == "__main__":
     parser.add_argument('--env-seed', type=int, default=42)
     parser.add_argument('--torch-seed', type=int, default=42)
     args = parser.parse_args()
+
     ALGORITHM = "dqn_cb"
     exp_id = args.id
     alg_config = args.alg_conf
@@ -361,6 +438,7 @@ if __name__ == "__main__":
     network = args.net
     env_seed = args.env_seed
     torch_seed = args.torch_seed
+
     print("### STARTING EXPERIMENT ###")
     print(f"Algorithm: {ALGORITHM.upper()}")
     print(f"Experiment ID: {exp_id}")
@@ -506,10 +584,11 @@ if __name__ == "__main__":
     env.mutation(disable_human_learning = not should_humans_adapt, mutation_start_percentile = -1)
     print_agent_counts(env)
     
-    # Set policies for machine agents
-    n_observation_table_features = 7+1 ## note: pass from config later; 7 features + is_acting; TODO
+    global_observation = GlobalObservation(env.machine_agents)
+
+    # Define Q-network
     q_net = DQN(
-            state_size = n_observation_table_features * len(env.machine_agents), ##
+            state_size = len(env.machine_agents) * global_observation.num_table_columns, ##
             action_space_size = env.environment_params[kc.ACTION_SPACE_SIZE], ##
             device=device,
             eps_init=eps_init,
@@ -527,13 +606,14 @@ if __name__ == "__main__":
     pbar.set_description("AV learning")
     os.makedirs(plots_folder, exist_ok=True)
 
-    global_observation = GlobalObservation(env.machine_agents)
+
     train_every_counter = 0 # Counter for training Q-Net every k agents 
 
     for episode in range(training_eps):
         env.reset()
         global_observation.reset()
         temp_memory = {agent.id: dict() for agent in env.machine_agents} # Keep buffer data (observation, action) before reward is known (termination/truncation iteration)
+
 
         # Simulate trafic day by day, collect data and keep training the network
         for agent_id in env.agent_iter():
@@ -561,31 +641,36 @@ if __name__ == "__main__":
                     train_every_counter = 0 # reset counter
                     q_net.learn()
 
-            else:
+
+            
+            else: # Episode in progress - manage starting & finishing agents
 
                 # Update global observation - with env state change
-                global_observation.update_recently_finished_machines(env)
-                global_observation.add_agent(agent_obj)
+                global_observation.update_state_with_recently_finished_machines(env)
+                global_observation.register_starting_agent(agent_obj)
 
                 # Get agent observation from global observation
-                agent_observation = global_observation.generate_agent_observation(agent_id_int)
+                agent_observation_vect = global_observation.get_flattened_agent_observation(agent_id_int)
 
                 # Select agent action
-                action = q_net.act(agent_observation)
-                temp_memory[agent_id_int].update({'observation': agent_observation, 'action': action}) # save to add to the buffer when reward is known
-                global_observation.add_agent_action(agent_id_int, action)
+                action = q_net.act(agent_observation_vect)
+                temp_memory[agent_id_int].update({'observation': agent_observation_vect, 'action': action}) # save to add to the buffer when reward is known
+                global_observation.register_starting_agent_action(agent_id_int, action)
 
 
                 
 
             env.step(action)
-            """Note: travel times for agents finished after last agant departure will not be included in global observation - 
-            because: env.step(action) first adds them to env.travel_times_list, then resets this list to [] in one call,
+            """Note: travel times for agents finished after last agent departure will not be included in global observation - 
+            because: TrafficEnvironment.step(action) first adds them to TrafficEnvironment.travel_times_list, then resets this list to [] in one call,
             so it is impossible to get these last part of travel times in this arrangement.
             But, the other fact is that we do not necessarly need them in global observation - for the last agent departing,
-            he does know these times at his start timepoint anyway. So they can be left as unknown in global obs when the episode ends."""
+            he does know these times at the moment his start timepoint anyway. So they can be left as unknown in global obs when the episode ends."""
 
-            
+        # Sanity check
+        global_observation._is_column_nondescending(colname='start_time')
+
+
         if episode % plot_every == 0:
             env.plot_results()
         pbar.update()
@@ -612,14 +697,14 @@ if __name__ == "__main__":
 
             else:
                 # Update global observation
-                global_observation.update_recently_finished_machines(env)
-                global_observation.add_agent(agent_obj)
+                global_observation.update_state_with_recently_finished_machines(env)
+                global_observation.register_starting_agent(agent_obj)
 
                 # Get agent observation from global observation
-                agent_observation = global_observation.generate_agent_observation(agent_id_int)
+                agent_observation_vect = global_observation.get_flattened_agent_observation(agent_id_int)
 
-                action = q_net.act(agent_observation)
-                global_observation.add_agent_action(agent_id_int, action)
+                action = q_net.act(agent_observation_vect)
+                global_observation.register_starting_agent_action(agent_id_int, action)
 
             env.step(action)
         pbar.update()
