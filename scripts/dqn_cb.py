@@ -179,6 +179,13 @@ if __name__ == "__main__":
     dump_config["algorithm"] = ALGORITHM
     dump_config["num_agents"] = num_agents
     dump_config["num_machines"] = num_machines
+
+    # Renaming parameter to match metrics.py assumptions. Changed from 'training_eps' to 'training_episodes' 
+    # to avoid confusion with epsilon parameters: 'eps_init' and 'eps_decay'. Ideally, this handling would be moved elsewhere
+    assert "training_eps" in dump_config or ( ("training_eps" not in dump_config) and ("training_episodes" in dump_config) ) 
+    if ("training_eps" not in dump_config) and ("training_episodes" in dump_config):
+        dump_config["training_eps"] = dump_config.pop("training_episodes")
+
     with open(exp_config_path, 'w', encoding='utf-8') as f:
         json.dump(dump_config, f, indent=4)
 
