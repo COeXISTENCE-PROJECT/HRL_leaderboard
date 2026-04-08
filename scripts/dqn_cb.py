@@ -29,8 +29,9 @@ from tqdm            import tqdm
 
 from baseline_models import BaseLearningModel
 from utils           import clear_SUMO_files
-from utils           import run_metrics_analysis
 from utils           import print_agent_counts
+from utils           import run_metrics_analysis
+from utils           import save_loss_records
 
 from routerl import Keychain as kc
 
@@ -277,13 +278,13 @@ if __name__ == "__main__":
 
 
     ### Collect experience for training (random sampling of actions)
-    pbar.set_description("Collecting experience samples.")
+    pbar.set_description("Collecting experience samples")
     os.makedirs(plots_folder, exist_ok=True)
 
     global_observation.enable_transition_collection()
 
     for episode in range(experience_collecting_episodes):
-        print(f"\nExperience collecting episode {episode}/{experience_collecting_episodes}")
+        print(f"\nExperience collecting episode {episode}/{experience_collecting_episodes}") #NOTE: rm before PR
 
         assert global_observation.collect_transitions == True
 
@@ -315,6 +316,7 @@ if __name__ == "__main__":
 
     ### Learning phase ###
     pbar.set_description("AV learning")
+
     q_net.set_train()
     global_observation.enable_transition_collection() #NOTE(3): maybe move this inside run_episode (with phase arg in run_episode?)?
 
@@ -345,6 +347,12 @@ if __name__ == "__main__":
 
         pbar.update()
     
+    save_loss_records(
+        records_folder,
+        q_net.training_loss_records,
+        columns=["iteration", "loss"],
+    )
+    
     
     ### Testing phase ###
     pbar.set_description("Testing")
@@ -371,8 +379,6 @@ if __name__ == "__main__":
     # Finalize the experiment
     pbar.close()
     env.plot_results()
-    losses_df = pd.DataFrame({"losses": q_net.loss})
-    losses_df.to_csv(os.path.join(records_folder, "losses.csv"))
     env.stop_simulation()
     clear_SUMO_files(os.path.join(records_folder, "SUMO_output"), os.path.join(records_folder, "episodes"), remove_additional_files=True)
     run_metrics_analysis(exp_id, results_folder="../results")

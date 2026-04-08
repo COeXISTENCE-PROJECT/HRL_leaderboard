@@ -458,7 +458,8 @@ class DQN(BaseLearningModel):
         self.batch_size = batch_size
         self.num_batches = num_batches
 
-        self.loss = list() # TODO: check this; may be wrong -> break plots --all (compare with iql implementation)
+        self.loss = [] # TODO: check this; may be wrong -> break plots --all (compare with iql implementation)
+        self.training_loss_records = [] # record loss info after each `learn()` call - List[dict], one dict per `learn()` call
 
         self.is_training = True
 
@@ -549,7 +550,7 @@ class DQN(BaseLearningModel):
             return
 
 
-        step_loss = list()
+        batch_losses = []
         for _ in range(self.num_batches):
 
             # Get batch of states, actions and rewards
@@ -565,12 +566,23 @@ class DQN(BaseLearningModel):
 
             # Backpropagate & optimize
             loss = self.loss_fn(predicted_q_values, target_q_values)
+            batch_losses.append(loss.item())
+
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-            step_loss.append(loss.item()) #NOTE: compare this with new dev loss logging
 
-        self.loss.append(sum(step_loss)/len(step_loss))
+
+        # Record loss
+        avg_iteration_loss = sum(batch_losses) / len(batch_losses)
+        self.training_loss_records.append(
+            {
+                "iteration": len(self.training_loss_records)+1,
+                "loss": avg_iteration_loss,
+                # "batch_losses": batch_losses #optionally
+            }
+        )
+
         self.decay_epsilon()
 
 
