@@ -405,11 +405,14 @@ class GlobalObservation:
 ### Simplified single-DQN implementation for single-step decision-making
 class DQN(BaseLearningModel):
     """
-    DQN structure:
-        - predicting network
-        - replay buffer
-        -
-    """ #TODO: curate docstring
+    Deep Q-Network (DQN) implementation.
+
+    Components:
+        - Q-network
+        - Replay buffer
+        - Epsilon-greedy policy (epsilon starting value and decay rule during learning)
+        - Training setup: optimizer, loss, batch handling.
+    """
     def __init__(self,
                 input_dim: int,
                 output_dim: int,
@@ -427,6 +430,11 @@ class DQN(BaseLearningModel):
                 lr=0.003, 
                 device="cpu"
                 ):
+
+        if min_buffer_size < batch_size:
+            raise ValueError(f"min_buffer_size ({self.min_buffer}) must be >= batch_size ({self.batch_size}) to allow sampling a full batch.")
+        assert min_buffer_size > 0
+        assert min_buffer_size <= max_buffer_size #NOTE: change to value errors?
 
         super().__init__()
         self.device = device
@@ -455,53 +463,52 @@ class DQN(BaseLearningModel):
 
         self.is_training = True
 
-        # Validation
-        assert min_buffer_size > 0
-        assert min_buffer_size <= max_buffer_size #NOTE: change to value errors?
-        
-        if min_buffer_size < batch_size:
-            raise ValueError(f"min_buffer_size ({self.min_buffer}) must be >= batch_size ({self.batch_size}) to allow sampling a full batch.")
+    def reset(self)->None:
+        """ Reset the model."""
+        raise NotImplementedError("reset(self) not implemented for DQN class.") # reset buffer, loss logging, epsilon, all training changeable params, (weights and biases?); set training flag to true
 
 
     def set_train(self)->None:
+        """
+        Set the model to training mode.
+
+        Effects:
+            - enables gradient updates,
+            - enables exploration via epsilon-greedy in `act()`
+        """
         self.is_training = True
         self.q_network.train()
 
-        # TODO - what with 
-        # ?loss
-        # ? epsilon
-        # ? memory buffer
-        # ? network params?
-
     def set_eval(self) -> None:
         """
-        Set DQN .is_training = False.
+        Set the model to evaluation mode.
 
         Effects:
-            - Set network to .eval() -> norm layers behavior.
-            - Only greedy policy in act() (q-net argmax action)
-            - Prevent from running learn() and pushing to buffer.(?) #TODO: decide
-        """ #NOTE: curate
+            - set network to .eval() -> norm layers behavior,
+            - only greedy policy in `act()` (Q-net argmax action),
+            - prevent from running `learn()`.
+        """ 
+
+        # NOTE: these unchenged or reset?
+        # ? cleaar loss logging
+        # ? reset epsilon
+
         self.is_training = False
         self.q_network.eval()
 
-        # NOTE: these probably keep unchanged here, reset in reset() [check how done in pytorch]
-        # ? clear buffer
-        # ? cleaar loss logging
-        # ? reset epsilon
-        # ? network params?
 
-    def reset(self)->None:
-        # reset buffer, loss logging, epsilon, all training changeable params, (weights and biases?) -> check how this is done in pytorch
-        # set training flag to true
-        raise NotImplementedError("reset(self) not implemented for DQN class.")
+
+
 
     def act(self, state: np.ndarray) -> int:
         """
-        Act epsilon-greedy.
+        Select action using epsilon-greedy policy.
 
-        Evaluation mode -> exploitation.
-        Training mode -> exploration (random action) with probability epsilon, exploitation (Q-net argmax) with probability (1-epsilon)
+        Training mode:
+            - Random action with probability epsilon
+            - Greedy action (argmax Q) with probability (1 - epsilon)
+        Evaluation mode:
+            - Argmax Q
         """
 
         if not self.is_training:
@@ -519,12 +526,21 @@ class DQN(BaseLearningModel):
         if not self.is_training:
             warnings.warn("You are pushing to DQN replay memory in eval mode")
 
-        self.memory.append((state, action, reward)) # All interactions are single-step, so we only store the last state, action, and reward
+        self.memory.append((state, action, reward))
         return
 
-    def learn(self):
+    def learn(self)->None:
         """
         Update network parameters.
+
+        Conditions:
+            - skip learning if memory buffer < min_buffer_size
+            - not permitted to run in evaluation mode
+
+        Procedure:
+            - sample `num_batches` from memory buffer
+            - pass through the network, update parameters
+            - decay epsilon after every `num_batches`
         """
 
         # Prevent learning in evaluation mode
@@ -561,10 +577,19 @@ class DQN(BaseLearningModel):
         self.loss.append(sum(step_loss)/len(step_loss))
         self.decay_epsilon()
 
-    def decay_epsilon(self):
+
+    def decay_epsilon(self)->None:
         self.epsilon *= self.epsilon_decay
 
     def _argmax_action(self, state: np.ndarray) -> int:
+        """
+        Return the greedy action (argmax Q-value) for a given state.
+
+        Args:
+            state (np.ndarray): state in the network input format.
+        Returns:
+            int: action with the highest predicted Q-value.
+        """
         state_tensor = torch.as_tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0) ## NOTE: changed from FloatTensor; no copying now
         
         # Ensure (batch, dim1, ..., dimk)
@@ -575,6 +600,9 @@ class DQN(BaseLearningModel):
             q_values = self.q_network(state_tensor)
         action = torch.argmax(q_values).item()
         return action
+
+
+
 
 
 class Network(nn.Module):
