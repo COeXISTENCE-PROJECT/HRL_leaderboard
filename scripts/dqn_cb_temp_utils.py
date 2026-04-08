@@ -93,7 +93,7 @@ class GlobalObservation:
         }
         self.state_table = self._initialize_state_table(agents)
 
-        self._transitions = {agent.id : {} for agent in agents} # {agentid: {obs: , action: , reward: }} #NOTE: rm comment? # store episode (s,a,r) info
+        self._transitions = {agent.id : {} for agent in agents} # {agentid: {obs: ..., action: ..., reward: ...}}
         self.collect_transitions = collect_transitions
 
         self.acting_agent_id = None
@@ -134,7 +134,7 @@ class GlobalObservation:
             pd.DataFrame indexed with agent IDs (integers) filled with default values for each column.
         """
 
-        idx_time_sorted = [agent.id for agent in sorted(agents, key=lambda x: x.start_time)] # note: some permutations on agents with equal start times can be added
+        idx_time_sorted = [agent.id for agent in sorted(agents, key=lambda x: x.start_time)]
 
         empty_columns = {
             key: [value] * len(idx_time_sorted)
@@ -205,16 +205,13 @@ class GlobalObservation:
                 This added column has value of 1 in the row corresponding to the specified agent.
         """
 
+        # if DEBUG: #TODO
+        #     assert agentid in self.state_table.index, f"Agent ID {agentid} not in self.state_table.index\nself.state_table.index: {self.state_table.index}"
+        #     assert agentid == self.acting_agent_id
 
-        assert agentid in self.state_table.index, f"Agent ID {agentid} not in self.state_table.index\nself.state_table.index: {self.state_table.index}"
-        assert agentid == self.acting_agent_id
-
-        #######################################################################################################################################################################
-        # Potential more sanity checks to perform (when ensuring corectness after changes; swithed off for efficiency) TODO: check this comment; to remove?s
-        #   - check if agent travel_times are sorted: assert self._is_column_nondescending(colname='start_time')
-        #   - optionally: check if all rows below current agent are filled with empty vals (assumed in current version; scheduled future agents may be added in next versions)
-        #######################################################################################################################################################################
-
+        #     # Assumption: rows below current agent are empty
+        #     # (may change if future scheduling logic is introduced)
+        #     # assert _check_future_rows_empty()
 
         # Get agent's view of state table
         obs = self.state_table.copy()
@@ -458,7 +455,6 @@ class DQN(BaseLearningModel):
         self.batch_size = batch_size
         self.num_batches = num_batches
 
-        self.loss = [] # TODO: check this; may be wrong -> break plots --all (compare with iql implementation)
         self.training_loss_records = [] # record loss info after each `learn()` call - List[dict], one dict per `learn()` call
 
         self.is_training = True
@@ -488,11 +484,6 @@ class DQN(BaseLearningModel):
             - only greedy policy in `act()` (Q-net argmax action),
             - prevent from running `learn()`.
         """ 
-
-        # NOTE: these unchenged or reset?
-        # ? cleaar loss logging
-        # ? reset epsilon
-
         self.is_training = False
         self.q_network.eval()
 
@@ -696,7 +687,7 @@ def run_episode(
             #     assert isinstance(reward, (np.floating, float)) and reward<0, f"Reward: {reward} ({type(reward)}); agent: {agent_id}"
 
             # Update table with travel times for the last chunk of agents (arriving after the last agent's departure)
-            if global_observation.is_empty_cell(agentid=agent_id, feature='travel_time'): ## NOTE: new, test
+            if global_observation.is_empty_cell(agentid=agent_id, feature='travel_time'):
                 travel_time = -reward
                 global_observation.set_agent_feature(agentid=agent_id, feature='travel_time', value=-travel_time)
 
@@ -726,7 +717,6 @@ def run_episode(
 
     
     # if DEBUG:
-    #     global_observation._is_column_nondescending(colname='start_time') # Sanity check #TODO: keep this or discard?
         #raise NotImplementedError("Check if state table format corresponds to finished episode.") #TODO check if all travel times filled, all is_acting==False (all is_known==True)
 
     # Set global observation flag to finish

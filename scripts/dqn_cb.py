@@ -149,7 +149,7 @@ if __name__ == "__main__":
         human_learning_episodes,
         human_learning_episodes + int(experience_collecting_episodes),
         human_learning_episodes + int(experience_collecting_episodes) + int(training_episodes)
-    ] # NOTE: check this in context of collecting experience phase
+    ]
     phase_names = ["Human stabilization", "Mutation and experience collecting", "AV learning", "Testing"]
 
 
@@ -243,7 +243,7 @@ if __name__ == "__main__":
 
 
     ### Human learning phase ###
-    pbar = tqdm(total=total_episodes, desc="Human learning") #TODO: include collecting experience here
+    pbar = tqdm(total=total_episodes, desc="Human learning")
     for episode in range(human_learning_episodes):
         env.step()
         pbar.update()
@@ -284,8 +284,6 @@ if __name__ == "__main__":
     global_observation.enable_transition_collection()
 
     for episode in range(experience_collecting_episodes):
-        print(f"\nExperience collecting episode {episode}/{experience_collecting_episodes}") #NOTE: rm before PR
-
         assert global_observation.collect_transitions == True
 
         # --- Run single episode and collect transitions ---
@@ -301,9 +299,6 @@ if __name__ == "__main__":
             q_net.push(s,a,r)
 
         # --- Plot visualization ---
-        #NOTE: this is probably redundant and can be done once at the end of the episode (as data for plots are read from files and plot is overwritten each call)
-        #NOTE: check how plot_every interacts with save_every (what if n/k mismatch?)
-        # Is this param only for generating intermediate plots in case experiment breaks?
         if episode % plot_every == 0:
             env.plot_results()
 
@@ -318,12 +313,11 @@ if __name__ == "__main__":
     pbar.set_description("AV learning")
 
     q_net.set_train()
-    global_observation.enable_transition_collection() #NOTE(3): maybe move this inside run_episode (with phase arg in run_episode?)?
+    global_observation.enable_transition_collection()
 
     for episode in range(training_episodes):
-        print(f"\nTraining episode: {episode}/{training_episodes}") ##NOTE: rm prints before PR
 
-        assert global_observation.collect_transitions == True
+        assert global_observation.collect_transitions == True #TODO: keep or remove assertions?
 
         # --- Run single episode and collect transitions ---
         run_episode(
@@ -382,7 +376,4 @@ if __name__ == "__main__":
     env.stop_simulation()
     clear_SUMO_files(os.path.join(records_folder, "SUMO_output"), os.path.join(records_folder, "episodes"), remove_additional_files=True)
     run_metrics_analysis(exp_id, results_folder="../results")
-
-
-    print("\n\nREMEMBER TO COMMIT ALGO CONFIG (and maybe env_config/test.txt (changed plotting to every episode)\n\n")
 
