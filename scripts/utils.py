@@ -1,5 +1,9 @@
 import xml.etree.ElementTree as ET
 import os
+import csv
+import subprocess
+import sys
+from typing import Optional
 
 def get_episodes(ep_path: str) -> list[int]:
     """Get the episodes data
@@ -108,3 +112,84 @@ def print_agent_counts(env):
     AV agents              | {len(env.machine_agents)}
     ----------------------------------------------------
     """)
+
+
+def save_loss_records(records_folder: str, loss_records: list[dict], columns: list[str]) -> str:
+    """
+    Save training loss records to a unified CSV file.
+
+    Args:
+        records_folder (str): Experiment output folder (e.g. ../results/<exp_id>).
+        loss_records (list[dict]): Row-wise loss data.
+        columns (list[str]): Ordered CSV columns.
+
+    Returns:
+        str: Absolute path to the saved CSV file.
+    """
+    losses_folder = os.path.join(records_folder, "losses")
+    os.makedirs(losses_folder, exist_ok=True)
+    loss_csv_path = os.path.join(losses_folder, "losses.csv")
+
+    with open(loss_csv_path, "w", newline="", encoding="utf-8") as loss_file:
+        writer = csv.DictWriter(loss_file, fieldnames=columns)
+        writer.writeheader()
+        for row in loss_records:
+            writer.writerow({column: row.get(column, "") for column in columns})
+
+    return os.path.abspath(loss_csv_path)
+
+
+def script_path_for_config(script_file: str, repo_root: Optional[str] = None) -> str:
+    """
+    Return a repository-relative script path for exp_config.json when possible.
+    Falls back to absolute path if the script is outside of the repository root.
+    """
+    script_abs = os.path.abspath(script_file)
+    if repo_root is None:
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    else:
+        repo_root = os.path.abspath(repo_root)
+
+    try:
+        relative_path = os.path.relpath(script_abs, repo_root)
+    except ValueError:
+        return script_abs
+
+    if relative_path.startswith(".."):
+        return script_abs
+
+    return relative_path.replace(os.sep, "/")
+
+
+def run_metrics_analysis(exp_id: str, results_folder: str = "../results", verbose: bool = False) -> bool:
+    """
+    Run analysis/metrics.py for a finished experiment.
+
+    The helper is intentionally non-failing so experiment scripts do not crash
+    if post-processing fails.
+    """
+    metrics_script = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "analysis", "metrics.py")
+    )
+    results_folder_path = os.path.abspath(results_folder)
+
+    command = [
+        sys.executable,
+        metrics_script,
+        "--id",
+        exp_id,
+        "--results-folder",
+        results_folder_path,
+    ]
+    if verbose:
+        command.extend(["--verbose", "True"])
+
+    print(f"Running metrics analysis for experiment '{exp_id}'...")
+    result = subprocess.run(command, check=False)
+    if result.returncode != 0:
+        print(
+            f"Warning: Metrics analysis failed for experiment '{exp_id}' "
+            f"(exit code {result.returncode})."
+        )
+        return False
+    return True
