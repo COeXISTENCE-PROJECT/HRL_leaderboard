@@ -5,6 +5,7 @@ import subprocess
 import sys
 from typing import Optional
 
+
 def get_episodes(ep_path: str) -> list[int]:
     """Get the episodes data
 
@@ -131,7 +132,7 @@ def save_loss_records(records_folder: str, loss_records: list[dict], columns: li
     loss_csv_path = os.path.join(losses_folder, "losses.csv")
 
     with open(loss_csv_path, "w", newline="", encoding="utf-8") as loss_file:
-        writer = csv.DictWriter(loss_file, fieldnames=columns)
+        writer = csv.DictWriter(loss_file, fieldnames=columns, extrasaction='ignore')
         writer.writeheader()
         for row in loss_records:
             writer.writerow({column: row.get(column, "") for column in columns})
@@ -193,3 +194,5 @@ def run_metrics_analysis(exp_id: str, results_folder: str = "../results", verbos
         )
         return False
     return True
+
+
