@@ -35,6 +35,7 @@ from routerl import Keychain as kc
 
 
 # TODO: view remaining NOTE/TODO annotations
+run_checks = True # TODO: rm when merging with main script
 
 
 ###############################
@@ -205,13 +206,13 @@ class GlobalObservation:
                 This added column has value of 1 in the row corresponding to the specified agent.
         """
 
-        # if DEBUG: #TODO
-        #     assert agentid in self.state_table.index, f"Agent ID {agentid} not in self.state_table.index\nself.state_table.index: {self.state_table.index}"
-        #     assert agentid == self.acting_agent_id
+        if run_checks:
+            assert agentid in self.state_table.index, f"Agent ID {agentid} not in self.state_table.index\nself.state_table.index: {self.state_table.index}"
+            assert agentid == self.acting_agent_id
 
-        #     # Assumption: rows below current agent are empty
-        #     # (may change if future scheduling logic is introduced)
-        #     # assert _check_future_rows_empty()
+            # Assumption: rows below current agent are empty.
+            # May change if future scheduling logic is introduced.
+            # assert _check_future_rows_empty()
 
         # Get agent's view of state table
         obs = self.state_table.copy()
@@ -683,7 +684,9 @@ def run_episode(
     # Iterate over agents sorted by travel time
     for agent_id_str in env.agent_iter():
         
-        # if DEBUG: assert isinstance(agent_id_str, str) and agent_id.isnumeric() #TODO
+        if run_checks:
+            assert isinstance(agent_id_str, str) and agent_id_str.isnumeric()
+
         agent = agent_lookup[agent_id_str]
         agent_id = int(agent_id_str)
 
@@ -691,15 +694,15 @@ def run_episode(
 
         if termination or truncation: # All agents finished, collect rewards
 
-            # if DEBUG:
-            #     assert isinstance(reward, (np.floating, float)) and reward<0, f"Reward: {reward} ({type(reward)}); agent: {agent_id}"
+            if run_checks:
+                assert isinstance(reward, (np.floating, float)) and reward<0, f"Reward: {reward} ({type(reward)}); agent: {agent_id}"
 
             # Update table with travel times for the last chunk of agents (arriving after the last agent's departure)
             if global_observation.is_empty_cell(agentid=agent_id, feature='travel_time'):
                 travel_time = -reward
                 global_observation.set_agent_feature(agentid=agent_id, feature='travel_time', value=-travel_time)
 
-            # Collect reward data for experience buffer
+            # Save reward in transitions cache
             if global_observation.collect_transitions:
                 global_observation.cache_transition_reward(agent_id, reward)
 
@@ -711,24 +714,26 @@ def run_episode(
             global_observation.update_state_with_recently_finished_machines(env)
             global_observation.register_starting_agent(agent)
             
-            # Get observation and action for current agent
+            # Get observation and select action for current agent
             obs = global_observation.get_flattened_agent_observation(agent_id)
             action = dqn.act(obs) # acts epsilon-greedy or armax(q-values), depends on DQN.is_training flag
             global_observation.register_starting_agent_action(agent_id, action)
 
-            # Collecting (s,a,_) data for experience buffer
+            # Save (state, action) pair in transitions cache
             if global_observation.collect_transitions:
                 global_observation.cache_transition_observation(agent_id, obs)
                 global_observation.cache_transition_action(agent_id, action)
 
         env.step(action)
 
-    
-    # if DEBUG:
-        #raise NotImplementedError("Check if state table format corresponds to finished episode.") #TODO check if all travel times filled, all is_acting==False (all is_known==True)
-
-    # Set global observation flag to finish
+    # Mark global observation as finished for episode
     global_observation.episode_finished = True
+    
+    # Develompent note:
+    # Possibly check if state table format corresponds to finished episode
+    # e.g. all travel times filled, all is_acting==False, (all is_known==True)
+
+
 
 
 

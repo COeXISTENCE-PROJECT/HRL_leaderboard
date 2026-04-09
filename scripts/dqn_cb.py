@@ -41,7 +41,6 @@ from dqn_cb_temp_utils import GlobalObservation, Network, DQN, run_episode
 
 
 # TODO: view remaining NOTE/TODO annotations + cleaning
-DEBUG = True
 
 
 
@@ -58,11 +57,6 @@ DEBUG = True
 
 # Main script to run the centralized DQN experiment
 if __name__ == "__main__":
-
-    if DEBUG:
-        print(f"\nDEBUG flag set to {DEBUG}.")
-        print(f"Turn off manually in {__file__} to disable debug messages and assertions.\n")
-
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--id', type=str, required=True)
@@ -118,6 +112,10 @@ if __name__ == "__main__":
     params.update(env_params)
     params.update(task_params)
     del params["desc"], env_params, task_params
+
+    # Set debug flag to False if not passed
+    if "run_checks" not in params:
+        params["run_checks"] = False
 
     # set params as variables in this script
     for key, value in params.items():
@@ -192,7 +190,7 @@ if __name__ == "__main__":
         json.dump(dump_config, f, indent=4)
 
     
-    if DEBUG:
+    if run_checks:
         assert update_every_k_episodes >=1 # (mid-episode training not supported)
 
 
@@ -305,8 +303,8 @@ if __name__ == "__main__":
 
         pbar.update()
     
-    if DEBUG:
-        assert len(q_net.memory) >= q_net.min_buffer_size
+    if run_checks:
+        assert len(q_net.memory) >= q_net.min_buffer_size, f"Not enough transitions in the buffer to start training ({len(q_net.memory)}). Required min_buffer_size: {q_net.min_buffer_size}"
 
 
 
@@ -321,7 +319,7 @@ if __name__ == "__main__":
 
     for episode in range(training_episodes):
 
-        assert global_observation.collect_transitions == True #TODO: keep or remove assertions?
+        assert global_observation.collect_transitions == True
 
         # --- Run single episode and collect transitions ---
         run_episode(
@@ -346,7 +344,7 @@ if __name__ == "__main__":
         pbar.update()
     loss_logger.close()
     
-    # save_loss_records(
+    # save_loss_records( #NOTE: rm
     #     records_folder,
     #     q_net.training_loss_records,
     #     columns=["iteration", "loss"],
