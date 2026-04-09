@@ -455,7 +455,7 @@ class DQN(BaseLearningModel):
         self.batch_size = batch_size
         self.num_batches = num_batches
 
-        self.training_loss_records = [] # record loss info after each `learn()` call - List[dict], one dict per `learn()` call
+        self.training_loss_records = [] # record loss info after each `learn()` call. Type is `list[dict]`, one dict per `learn()` call
 
         self.is_training = True
 
@@ -548,7 +548,7 @@ class DQN(BaseLearningModel):
             batch = random.sample(self.memory, self.batch_size)
             states, actions, rewards = zip(*batch)
             states_tensor = torch.FloatTensor(states).to(self.device) #NOTE(2): change to as_tensor(...)
-            actions_tensor = torch.LongTensor(actions).unsqueeze(1).to(self.device) ## TODO: check how actions are encoded in buffer (int or one-hot)
+            actions_tensor = torch.LongTensor(actions).unsqueeze(1).to(self.device)
             rewards_tensor = torch.FloatTensor(rewards).unsqueeze(1).to(self.device)
 
             # Predict Q-values (travel times) for actions, compare with recorded travel times
@@ -592,11 +592,11 @@ class DQN(BaseLearningModel):
         Returns:
             int: action with the highest predicted Q-value.
         """
-        state_tensor = torch.as_tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0) ## NOTE: changed from FloatTensor; no copying now
+        state_tensor = torch.as_tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
         
-        # Ensure (batch, dim1, ..., dimk)
+        # Ensure shape starts from batch dim: (batch, dim1, ..., dimk)
         if state_tensor.ndim == 1:
-            state_tensor = state_tensor.unsqueeze(0) #NOTE: add checking if earlier (without ndim==1) first dim wasnt taken as batch in URB(?)
+            state_tensor = state_tensor.unsqueeze(0)
 
         with torch.no_grad():
             q_values = self.q_network(state_tensor)
