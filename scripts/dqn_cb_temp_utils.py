@@ -547,9 +547,11 @@ class DQN(BaseLearningModel):
             # Get batch of states, actions and rewards
             batch = random.sample(self.memory, self.batch_size)
             states, actions, rewards = zip(*batch)
-            states_tensor = torch.FloatTensor(states).to(self.device) #NOTE(2): change to as_tensor(...)
-            actions_tensor = torch.LongTensor(actions).unsqueeze(1).to(self.device)
-            rewards_tensor = torch.FloatTensor(rewards).unsqueeze(1).to(self.device)
+
+            states_tensor = torch.as_tensor(states, dtype=torch.float32, device=self.device)
+            actions_tensor = torch.as_tensor(actions, dtype=torch.long, device=self.device).unsqueeze(1)
+            rewards_tensor = torch.as_tensor(actions, dtype=torch.float32, device=self.device).unsqueeze(1)
+
 
             # Predict Q-values (travel times) for actions, compare with recorded travel times
             predicted_q_values = self.q_network(states_tensor).gather(1, actions_tensor)
