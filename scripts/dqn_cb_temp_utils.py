@@ -428,7 +428,7 @@ class DQN(BaseLearningModel):
                 ):
 
         if min_buffer_size < batch_size:
-            raise ValueError(f"min_buffer_size ({self.min_buffer}) must be >= batch_size ({self.batch_size}) to allow sampling a full batch.")
+            raise ValueError(f"min_buffer_size ({min_buffer_size}) must be >= batch_size ({batch_size}) to allow sampling a full batch.")
         assert min_buffer_size > 0
         assert min_buffer_size <= max_buffer_size #NOTE: change to value errors?
 
@@ -573,6 +573,8 @@ class DQN(BaseLearningModel):
                 # "batch_losses": batch_losses #optionally
             }
         )
+
+        # 
 
         self.decay_epsilon()
 
