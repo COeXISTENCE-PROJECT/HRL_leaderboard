@@ -342,11 +342,6 @@ if __name__ == "__main__":
         pbar.update()
     loss_logger.close()
     
-    # save_loss_records( #NOTE: rm
-    #     records_folder,
-    #     q_net.training_loss_records,
-    #     columns=["iteration", "loss"],
-    # )
     
     
     ### Testing phase ###
