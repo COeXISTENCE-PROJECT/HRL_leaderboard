@@ -40,8 +40,6 @@ from routerl import Keychain as kc
 from dqn_cb_temp_utils import GlobalObservation, Network, DQN, run_episode
 
 
-# TODO: view remaining NOTE/TODO annotations + cleaning
-
 
 
 ####################################   OBSERVATION AND Q-NETWORK IMPLEMENTATION   #####################################################

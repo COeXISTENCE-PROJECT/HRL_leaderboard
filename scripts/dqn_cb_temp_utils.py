@@ -34,7 +34,7 @@ from utils           import print_agent_counts
 from routerl import Keychain as kc
 
 
-# TODO: view remaining NOTE/TODO annotations
+
 run_checks = True # TODO: rm when merging with main script
 
 
@@ -114,7 +114,11 @@ class GlobalObservation:
             None
         """
 
-        self.state_table[:] = pd.DataFrame(self.features, index=self.state_table.index) # NOTE: add permuting agents with the same start times here or somwhere else (e.g. compare _initialize_state_table)
+        # Development note:
+        # During training, permute agents with identical start times to avoid ordering bias.
+        # Will add minor overhead but improve robustness, especially without fixed demand.
+
+        self.state_table[:] = pd.DataFrame(self.features, index=self.state_table.index)
         self._transitions = {agentid: {} for agentid in self._transitions}
         
         self.acting_agent_id = None
@@ -324,10 +328,10 @@ class GlobalObservation:
         df = self.state_table
         return df.index[df['is_known'] & ~df['has_finished']]
 
-    def get_agent_feature(self, agentid: int, feature: str)->Any: #TODO(2): change to property(?)
+    def get_agent_feature(self, agentid: int, feature: str)->Any:
         return self.state_table.at[agentid, feature]
 
-    def set_agent_feature(self, agentid: int, feature: str, value: Any)->None: #TODO(2): change to property(?)
+    def set_agent_feature(self, agentid: int, feature: str, value: Any) -> None:
 
         current_value = self.state_table.at[agentid, feature]
         default_value = self.features[feature]
