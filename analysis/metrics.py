@@ -357,26 +357,31 @@ def add_benchmark_columns(df: pd.DataFrame, params: dict) -> pd.DataFrame:
     if df.empty:
         return df
 
-    if "vehicleTripStatistics_count" not in df.columns:
-        print("Warning: 'vehicleTripStatistics_count' column not found in DataFrame. Cannot add benchmark columns.")
-        return df
-
-    n_agents = int(df["vehicleTripStatistics_count"].iloc[0])
+    # Infer agent IDs from actual per-agent columns instead of relying on
+    # vehicleTripStatistics_count, which may be lower in sliced frames.
+    duration_ids = sorted({
+        int(col.split("_")[1])
+        for col in df.columns
+        if col.startswith("agent_") and col.endswith("_duration")
+    })
+    action_ids = sorted({
+        int(col.split("_")[1])
+        for col in df.columns
+        if col.startswith("agent_") and col.endswith("_action")
+    })
 
     new_columns = {}
     
     new_columns.update({
         f"agent_{i}_action_change": (df[f"agent_{i}_action"] != df[f"agent_{i}_action"].shift(1)).astype(int)
-        for i in range(n_agents)
-        if f"agent_{i}_action" in df.columns
+        for i in action_ids
     })
 
     avg_times_pre = params.get("avg_times_pre", {})
 
     new_columns.update({
         f"agent_{i}_time_lost": df[f"agent_{i}_duration"] - avg_times_pre.get(i, 0) 
-        for i in range(n_agents)
-        if f"agent_{i}_duration" in df.columns
+        for i in duration_ids
     })
 
     new_df = pd.DataFrame(new_columns)
@@ -580,10 +585,6 @@ def extract_metrics(path, config, verbose=False):
         ) / n_agents if n_agents > 0 else np.nan
 
     # ----- Calculate metrics (Time lost) -----
-
-    total_time_lost = {}
-    for id in human_ids + CAV_ids:
-        total_time_lost[id] = after_mutation[f"agent_{id}_time_lost"].sum()
 
     average_time_lost, average_human_time_lost, average_CAV_time_lost = np.nan, np.nan, np.nan
 
