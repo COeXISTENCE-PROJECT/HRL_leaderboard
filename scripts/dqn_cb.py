@@ -979,6 +979,10 @@ if __name__ == "__main__":
     global_observation.enable_transition_collection()
 
     for episode in range(experience_collecting_episodes):
+
+        if run_checks:
+            print(f"\nCollectin experience episodes: {episode}/{experience_collecting_episodes}")
+
         assert global_observation.collect_transitions == True
 
         # --- Run single episode and collect transitions ---
@@ -1015,6 +1019,9 @@ if __name__ == "__main__":
 
     for episode in range(training_episodes):
 
+        if run_checks:
+            print(f"\nTraining episodes: {episode}/{training_episodes}")
+
         assert global_observation.collect_transitions == True
 
         # --- Run single episode and collect transitions ---
@@ -1050,7 +1057,9 @@ if __name__ == "__main__":
 
 
     for episode in range(test_eps):
-        print(f"\nTest episode: {episode}/{test_eps}")
+
+        if run_checks:
+            print(f"\nTest episode: {episode}/{test_eps}")
 
         run_episode(
             env=env,
