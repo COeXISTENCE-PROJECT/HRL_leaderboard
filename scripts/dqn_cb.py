@@ -711,7 +711,7 @@ def run_episode(
             # Update table with travel times for the last chunk of agents (arriving after the last agent's departure)
             if global_observation.is_empty_cell(agentid=agent_id, feature='travel_time'):
                 travel_time = -reward
-                global_observation.set_agent_feature(agentid=agent_id, feature='travel_time', value=-travel_time)
+                global_observation.set_agent_feature(agentid=agent_id, feature='travel_time', value=travel_time)
 
             # Save reward in transitions cache
             if global_observation.collect_transitions:
@@ -996,6 +996,7 @@ if __name__ == "__main__":
         # --- Move collected (s, a, r) transitions to DQN replay buffer ---
         for (s,a,r) in global_observation.flush_transitions():
             q_net.push(s,a,r)
+
 
         # --- Plot visualization ---
         if episode % plot_every == 0:
