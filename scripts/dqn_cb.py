@@ -548,9 +548,9 @@ class DQN(BaseLearningModel):
         if not self.is_training:
             raise RuntimeError("Cannot call `learn()` in evaluation mode. Set `self.is_training = True` to update network.")
 
-        # Skip learning if not enough data in the buffer
+        # Prevent learning if not enough data in the buffer
         if len(self.memory) < self.min_buffer_size:
-            print(f"Skipping learn: memory size {len(self.memory)} < min_buffer_size {self.min_buffer}")
+            raise ValueError("Insufficient memory to perform learning step") #less restrictive: print(f"Skipping learn: memory size {len(self.memory)} < min_buffer_size {self.min_buffer}")
             return
 
 
@@ -563,7 +563,7 @@ class DQN(BaseLearningModel):
 
             states_tensor = torch.as_tensor(states, dtype=torch.float32, device=self.device)
             actions_tensor = torch.as_tensor(actions, dtype=torch.long, device=self.device).unsqueeze(1)
-            rewards_tensor = torch.as_tensor(actions, dtype=torch.float32, device=self.device).unsqueeze(1)
+            rewards_tensor = torch.as_tensor(rewards, dtype=torch.float32, device=self.device).unsqueeze(1)
 
 
             # Predict Q-values (travel times) for actions, compare with recorded travel times
@@ -981,7 +981,7 @@ if __name__ == "__main__":
     for episode in range(experience_collecting_episodes):
 
         if run_checks:
-            print(f"\nCollectin experience episodes: {episode}/{experience_collecting_episodes}")
+            print(f"\nCollecting experience episodes: {episode}/{experience_collecting_episodes}")
 
         assert global_observation.collect_transitions == True
 
