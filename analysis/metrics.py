@@ -419,6 +419,13 @@ def get_type_ids(df: pd.DataFrame, type: str) -> list:
 def slice_episodes(df: pd.DataFrame, config: dict) -> dict:
     """
     Slice the DataFrame into periods of interest.
+
+    Output data frames:
+        - 'before_mutation' - last 50 episodes of human learning phase (before mutation); or all human learning episodes if less than 50.
+        - 'after_mutation' - all episodes with CAVS - starting from episode after mutation, ending with the end of the experiment.
+        - 'testing_frames' - episodes from testing phase only.
+        - 'training_frames' - episodes from CAV training period only.
+
     Args:
         df (pd.DataFrame): The DataFrame to slice.
         config (dict): The configuration dictionary.
@@ -426,8 +433,8 @@ def slice_episodes(df: pd.DataFrame, config: dict) -> dict:
         dict: A dictionary containing the sliced DataFrames.
     """
 
-    hl_episodes = int(config["human_learning_episodes"])
-    training_eps = int(config["training_eps"])
+    hl_episodes = int(config["human_learning_episodes"]) 
+    training_eps = int(config["training_eps"]) 
 
     training_duration = hl_episodes + training_eps
     return {
