@@ -433,21 +433,34 @@ def slice_episodes(df: pd.DataFrame, config: dict) -> dict:
         dict: A dictionary containing the sliced DataFrames.
     """
 
-    hl_episodes = int(config["human_learning_episodes"]) 
-    training_eps = int(config["training_eps"]) 
 
-    training_duration = hl_episodes + training_eps
+    # Development note:
+    #   TODO: generalize phase handling.
+    #   Move phase definition and boundary computation (e.g., hl, experience_collecting, training, testing) to the experiment scripts (URB/scripts/<algo>.py),
+    #   store boundaries explictky in exp_config, and consume them here (metrics).
+
+    # Phase lengths
+    hl_episodes = int(config["human_learning_episodes"])
+    experience_collecting_eps = int(config["experience_collecting_episodes"])
+    training_eps = int(config["training_eps"])
+
+    # Assuming episode indexing starts from 1
+    trainphase_start_episode = hl_episodes + experience_collecting_eps + 1
+    testphase_start_episode = hl_episodes + experience_collecting_eps + training_eps + 1
+
+
     return {
         "before_mutation": df[
             (df["episode"] <= hl_episodes)
             & (df["episode"] > hl_episodes - 50)  # Last 50 days of simulation taken as human policy testing period
         ].copy(),
         "after_mutation": df[df["episode"] > hl_episodes].copy(),
-        "testing_frames": df[df["episode"] > training_duration].copy(),
-        "training_frames": df[
-            (df["episode"] > hl_episodes)
-            & (df["episode"] <= training_duration)
+
+        "training_frames": df[ 
+            (df["episode"] >= trainphase_start_episode)
+            & (df["episode"] < testphase_start_episode)
         ].copy(),
+        "testing_frames": df[df["episode"] >= testphase_start_episode].copy(),
     }
 
 
@@ -788,8 +801,11 @@ if __name__ == "__main__":
         computed_training_eps = 0   
 
     metric_config = {
+        "algorithm": exp_config["algorithm"],
+
         "human_learning_episodes": exp_config["human_learning_episodes"],
         "training_eps": computed_training_eps,
+        "experience_collecting_episodes": exp_config.get("experience_collecting_episodes", 0), # Use .get for non-critical keys
         "test_eps": exp_config.get("test_eps", 0), # Use .get for non-critical keys
     }
 
