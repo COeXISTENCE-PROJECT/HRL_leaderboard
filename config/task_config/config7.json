@@ -6,8 +6,7 @@
         "100 test episodes",
         "Humans adapt during AV learning",
         "AVs are altruistic",
-        "Human model is gawron",
-        "Gawron parameters are default values in RouteRL"
+        "Human model is gawron"
     ],
 
     "ratio_machines" : 0.4,
@@ -15,5 +14,9 @@
     "test_eps" : 100,
     "should_humans_adapt": true,
     "av_behavior" : "altruistic",
-    "human_model" : "gawron"
+    "human_model" : "gawron",
+    "human_alpha": 0.2,
+    "human_beta": -1.5,
+    "human_beta_randomness": 0.1,
+    "human_deterministic": true
 }
