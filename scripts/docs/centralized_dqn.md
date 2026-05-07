@@ -4,16 +4,27 @@ The centralized DQN approach for the AV routing task is built on two core compon
 
 **GlobalObservation** maintains a centralized representation of the CAV fleet state, including agents origin, destination, departure time, selected route, and travel duration (for completed trips). It serves as the primary data source for the cDQN.
 
-**Centralized DQN agent** (cDQN) acts as a fleet-level decision-maker with continuous access to the global fleet state. For each departing AV agent, it selects a route based on a snapshot of the `GlobalObservation` at the AV agent’s departure time.
+**Centralized DQN agent** (cDQN) acts as a fleet-level decision-maker with continuous access to the global fleet state. For each departing CAV agent, it selects a route based on a snapshot of the `GlobalObservation` at the CAV agent’s departure time.
 
 
 ## Technical details
 
 ### GlobalObservation
 
-The core structure of the `GlobalObservation` class is a table of shape `num_agents × num_features`, where each row corresponds to an agent and columns represent features such as origin, destination, departure time, selected route, travel time (if completed), and boolean status indicators (is driving, finished, known).
+The core data structure in the `GlobalObservation` class is a table of shape `num_agents` × `num_features`, where rows correspond to CAV fleet agents and columns represent observed features, such as origin, destination, departure time, selected route, CAV travel time (if the trip is completed), and boolean status indicators (like: is driving, finished, known).
+
+<figure>
+  <img src="../../docs/scripts_docs/GlobalObservation.png">
+  <figcaption>GlobalObservation table schema.</figcaption>
+</figure>
+
 
 For each agent, a per-agent observation is constructed as a snapshot of this table at the agent’s departure time. An additional one-hot column identifying the currently starting agent is added, resulting in a table of shape `num_agents × (num_features + 1)`, which is then flattened and used as input to the cDQN.
+
+<figure>
+  <img src="../../docs/scripts_docs/GlobalObservation2.png">
+  <figcaption>GlobalObservation table as model input.</figcaption>
+</figure>
 
 The table is initialized with empty values at the start of the experiment and incrementally populated as agents depart.
 
@@ -28,13 +39,19 @@ The current implementation uses a single MLP-based Q-network (without a target n
 
 ## Key new features
 
-Compared to previous approaches (IQL, IPPO, MAPPO, QMIX), this method provides the following new qualities:
+Compared to previous approaches (IQL, IPPO, MAPPO, QMIX), this method introduces the following qualities:
 
-- Utilizes **contextual information** from **all city areas where AVs travel** (as opposed to the previously used departure counts limited to the starting OD).
-This gives the model the ability to capture more of the overall city dynamics, in particular implicitly learn about remote factors that influence congestion for a given vehicle.
-- The defined `GlobalObservation` structure now **enables a multi-step decision making** setup, which was not available in the previous task formulation. This allows the global agent to account for the future evolution of the system, compared to making one-shot decisions at departure time by single AV agents. 
+- Utilizes **contextual information** from **all city areas traversed by CAVs**, instead of relying only on departure counts associated with the OD pairs.
+This gives the model the ability to capture global traffic dynamics, in particular, to implicitly learn remote factors that influence congestion experienced by a given vehicle.
 
-Note: from a practical perspective, the current `GlobalObservation` design does not require any additional infrastructure compared to the prior observation types (OD-departure count). It relies only on basic information that can be registered and shared by AV vehicles, which makes it feasible to consider in realistic setting.
+- The current cDQN experiments are based on a single-step decision setting, consistent with earlier MARL methods (IPPO, MAPPO, IQL, QMIX). However, the introduced `GlobalObservation` formulation enables future extensions **toward multi-step scenarios**, which were not feasible under previous observation designs. In such settings, a global agent could account for the temporal evolution of the system rather than making only a one-shot decisions at CAV departure time.
+
+
+
+
+
+
+Note: from a practical perspective, the current `GlobalObservation` design does not require any additional traffic infrastructure compared to the prior observation types (OD-departure count). It relies only on basic information that can be registered and shared by CAV vehicles, which makes it feasible to consider in realistic setting.
 
 
 ## Further development
@@ -42,12 +59,12 @@ Note: from a practical perspective, the current `GlobalObservation` design does 
 ### Current limitations:
 
 cDQN level:
-- **uniform replay buffer storage and sampling** - introduces a signal bias toward first agents ($k^i$ possible observations for $i$-th agent, where $k$ is number of possible routes per OD). This leads to an unequal learning signal across AV agents.
-- uniform exploration in a large state space (-> introduce biased exploration? e.g. towards routes with lower free-flow time). This is a more general issue and not specific to cDQN alone.
+- **Uniform replay buffer storage and sampling** - introduces a signal bias toward first agents ($k^i$ possible observations for $i$-th agent, where $k$ is number of possible routes per OD). This leads to an unequal learning signal across AV agents.
+- Uniform exploration in a large state space (possible solution - introduce biased exploration(?) e.g. bias towards routes with lower free-flow time). This is a broader issue, not specific to cDQN itself.
 
 Environment representation level:
-- OD pairs represented as integers -> no spatial meaning (->coordinate-based encoding can be considered),
-- route choices represented as integers (meaningful representation: open problem -> ongoing path-clustering approach as a soulution?).
+- OD pairs are currently represented as integers, which has no spatial meaning (-> coordinate-based encoding can be considered),
+- Route choices are represented as integers (meaningful representation: an open problem).
 
 
 
@@ -55,7 +72,7 @@ Environment representation level:
 ### Extensions / experiment ideas:
 
 General:
-- Multi-step scenarios: extend beyond single-step decision making.
+- Multi-step scenarios: use GlobalObservation to extend beyond single-step decision making.
 
 Architecture develompent:
 - Attention over `GlobalObservation` table (identify most relevant agents for a starting agent).
