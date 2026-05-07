@@ -13,18 +13,21 @@ The centralized DQN approach for the AV routing task is built on two core compon
 
 The core data structure in the `GlobalObservation` class is a table of shape `num_agents` × `num_features`, where rows correspond to CAV fleet agents and columns represent observed features, such as origin, destination, departure time, selected route, CAV travel time (if the trip is completed), and boolean status indicators (like: is driving, finished, known).
 
+<br>
 <figure>
-  <img src="../../docs/scripts_docs/GlobalObservation.png">
+  <img src="../../docs/scripts_docs/GlobalObservation.png" width="500">
   <figcaption>GlobalObservation table schema.</figcaption>
 </figure>
-
+<br>
 
 For each agent, a per-agent observation is constructed as a snapshot of this table at the agent’s departure time. An additional one-hot column identifying the currently starting agent is added, resulting in a table of shape `num_agents × (num_features + 1)`, which is then flattened and used as input to the cDQN.
 
+<br>
 <figure>
-  <img src="../../docs/scripts_docs/GlobalObservation2.png">
+  <img src="../../docs/scripts_docs/GlobalObservation2.png" width="500">
   <figcaption>GlobalObservation table as model input.</figcaption>
 </figure>
+<br>
 
 The table is initialized with empty values at the start of the experiment and incrementally populated as agents depart.
 
