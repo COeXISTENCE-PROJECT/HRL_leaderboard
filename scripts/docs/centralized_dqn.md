@@ -20,7 +20,7 @@ The core data structure in the `GlobalObservation` class is a table of shape `nu
   <figcaption>GlobalObservation table schema.</figcaption>
 </figure>
 
-<br>
+<br><br><br>
 
 For each agent, a per-agent observation is constructed as a snapshot of this table at the agent’s departure time. An additional one-hot column identifying the currently starting agent is added, resulting in a table of shape `num_agents × (num_features + 1)`, which is then flattened and used as input to the cDQN.
 
@@ -31,7 +31,7 @@ For each agent, a per-agent observation is constructed as a snapshot of this tab
   <figcaption>GlobalObservation table as model input.</figcaption>
 </figure>
 
-<br>
+<br><br><br>
 
 The table is initialized with empty values at the start of the experiment and incrementally populated as agents depart.
 
