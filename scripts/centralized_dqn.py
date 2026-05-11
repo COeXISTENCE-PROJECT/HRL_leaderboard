@@ -34,18 +34,19 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from collections     import deque
-from routerl         import TrafficEnvironment
-from tqdm            import tqdm
+from collections import deque
+from routerl     import TrafficEnvironment, Keychain as kc
+from tqdm        import tqdm
 
-import utils
+
 from baseline_models import BaseLearningModel
-from utils           import clear_SUMO_files
-from utils           import print_agent_counts
-from utils           import run_metrics_analysis
-from utils           import save_loss_records
-
-from routerl import Keychain as kc
+from utils           import (
+    clear_SUMO_files,
+    CSVLossLogger,
+    print_agent_counts,
+    run_metrics_analysis,
+    script_path_for_config
+)
 
 
 
@@ -1029,7 +1030,7 @@ if __name__ == "__main__":
     global_observation.enable_transition_collection()
 
     # Create logger for streaming loss
-    loss_logger = utils.CSVLossLogger(path=os.path.join(records_folder, "losses", "losses.csv"), columns=["iteration", "loss"])
+    loss_logger = CSVLossLogger(path=os.path.join(records_folder, "losses", "losses.csv"), columns=["iteration", "loss"])
 
     for episode in range(training_episodes):
 
