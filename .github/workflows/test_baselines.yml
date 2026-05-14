@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - '**'
+    paths:
+      - "scripts/**"
+      - "config/**"
+      - "baseline_methods/**"
+      - "metrics/**"
+      - "tests/test_baselines.py"
+      - ".github/workflows/test_baselines.yml"
   pull_request:
     branches:
       - '**'

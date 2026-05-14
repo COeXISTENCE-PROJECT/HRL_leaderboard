@@ -1,12 +1,22 @@
-![GitHub Release](https://img.shields.io/github/v/release/COeXISTENCE-PROJECT/urb?color=green)
-[![DOI](https://zenodo.org/badge/962568914.svg)](https://doi.org/10.5281/zenodo.17422845)
-[![Dataset](https://img.shields.io/badge/Dataset-Available-blue?logo=kaggle&logoColor=white)](https://www.kaggle.com/datasets/ukaszgorczyca/urb-networks)
-[![Citation](https://img.shields.io/badge/Cite-this%20work-blue?logo=citation-needed&logoColor=white)](https://github.com/COeXISTENCE-PROJECT/URB/blob/main/CITATION.CFF)
-[![Test scripts](https://github.com/COeXISTENCE-PROJECT/URB/actions/workflows/test_scripts.yml/badge.svg?branch=main)](https://github.com/COeXISTENCE-PROJECT/URB/actions/workflows/test_scripts.yml)
-[![Test baselines](https://github.com/COeXISTENCE-PROJECT/URB/actions/workflows/test_baselines.yml/badge.svg)](https://github.com/COeXISTENCE-PROJECT/URB/actions/workflows/test_baselines.yml)
-![GitHub License](https://img.shields.io/github/license/COeXISTENCE-PROJECT/urb)
-[![Open in Code Ocean](https://codeocean.com/codeocean-assets/badge/open-in-code-ocean.svg)](https://codeocean.com/capsule/1896262/tree)
+<p align="center">
+  <img alt="GitHub Release" src="https://img.shields.io/github/v/release/COeXISTENCE-PROJECT/urb?color=green"/>
+  <a href="https://doi.org/10.5281/zenodo.17422845"><img alt="DOI" src="https://zenodo.org/badge/962568914.svg"/></a>
+  <a href="https://www.kaggle.com/datasets/ukaszgorczyca/urb-networks"><img alt="Dataset" src="https://img.shields.io/badge/Dataset-Available-blue?logo=kaggle&logoColor=white"/></a>
+  <a href="https://github.com/COeXISTENCE-PROJECT/URB/blob/main/CITATION.CFF"><img alt="Citation" src="https://img.shields.io/badge/Cite-this%20work-blue?logo=citation-needed&logoColor=white"/></a>
+</p>
 
+<p align="center">
+  <a href="https://github.com/COeXISTENCE-PROJECT/URB/actions/workflows/test_scripts.yml"><img alt="Test scripts" src="https://github.com/COeXISTENCE-PROJECT/URB/actions/workflows/test_scripts.yml/badge.svg?branch=main"/></a>
+  <a href="https://github.com/COeXISTENCE-PROJECT/URB/actions/workflows/test_baselines.yml"><img alt="Test baselines" src="https://github.com/COeXISTENCE-PROJECT/URB/actions/workflows/test_baselines.yml/badge.svg"/></a>
+  <img alt="GitHub License" src="https://img.shields.io/github/license/COeXISTENCE-PROJECT/urb"/>
+  <a href="https://codeocean.com/capsule/1896262/tree"><img alt="Open in Code Ocean" src="https://codeocean.com/codeocean-assets/badge/open-in-code-ocean.svg"/></a>
+</p>
+
+<p align="center">
+  <a href="https://coexistence-project.github.io/URB/">
+    <img alt="Official leaderboard" src="docs/official_leaderboard_badge.svg" width="294"/>
+  </a>
+</p>
 
 
 <p align="center">
@@ -202,6 +212,9 @@ python scripts/greedy.py --id ing_greedy --alg-conf config1 --task-conf config2 
 
 Each experiment outputs set of raw records, which are then processed with the script in this folder for a set of performance indicators which we report and several additional metrics that track the quality of the solution and its impact to the system.
 
+All experiment scripts in `scripts/` now automatically run `analysis/metrics.py` at the end of execution.
+Manual execution is still supported as described below.
+
 #### Usage
 
 To use the analysis script, you have to provide in the command line the following command:
@@ -211,6 +224,9 @@ python analysis/metrics.py --id <exp_id> --verbose <verbose> --results-folder <r
 ```
 
 that will collect the results from the experiment with identifier ```<exp_id>``` and save them in the folder ```<exp_id>/metrics/```. The ```--verbose``` flag is optional and if set to ```True``` will print additional information about the analysis process. Flag ```--results-folder``` is optional and if set to ```True``` will use the folder ```<results-folder>``` instead of the default one ```results/```. The flags ```--skip-clearing``` and ```--skip-collecting``` are optional and if set to ```True``` will skip clearing and collecting the results from the experiment, respectively. Those operations have to be done only once, so if you are running the analysis script multiple times, you can skip them.
+
+Loss values from learning scripts are saved in a unified CSV format at:
+`results/<exp_id>/losses/losses.csv`
 
 #### Reported indicators
 
@@ -236,15 +252,9 @@ We provide templates for extending the possible experiments that can be conducte
 ### Adding new scripts
 Users can add new experiment scripts for testing different algorithms, different implementations and different training pipelines. The recommended script structure is provided in [`scripts/base_script.py`](scripts/base_script.py).
 
-
 ### Adding new baselines
 - **Decentralized (per-agent) baseline models**: users can define and use their own methods by creating a new model that extends [`baseline_models/BaseLearningModel`](baseline_models/base.py).
-
 - **Centralized baseline models** (or methods that cannot be reasonably implemented in a per-agent manner): the recommended approach is to implement them using the universal [`scripts/base_script.py`](scripts/base_script.py) template, in the same way as RL methods.
-
-
-
-
 
 ### New scenarios and hyperparameterizations
 Users can extend possible experiment configurations by adding:

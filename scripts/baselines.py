@@ -6,7 +6,6 @@ Baseline methods can be found in the baseline_models/ directory.
 import os
 import sys
 
-
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if repo_root not in sys.path:
@@ -25,8 +24,12 @@ from routerl import Keychain as kc
 from routerl import TrafficEnvironment
 from tqdm import tqdm
 
-from utils import clear_SUMO_files
 from baseline_models import get_baseline
+from utils import clear_SUMO_files
+from utils import run_metrics_analysis
+from utils import script_path_for_config
+from utils import print_agent_counts
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -106,6 +109,9 @@ if __name__ == "__main__":
             content = f.read()
         with open(new_agents_csv_path, 'w', encoding='utf-8') as f:
             f.write(content)
+        max_start_time = pd.read_csv(new_agents_csv_path)['start_time'].max()
+    else:
+        raise FileNotFoundError(f"Agents CSV file not found at {agents_csv_path}. Please check the network folder.")
             
     num_machines = int(num_agents * ratio_machines)
     total_episodes = human_learning_episodes + training_eps + test_eps
@@ -121,6 +127,7 @@ if __name__ == "__main__":
     dump_config["baseline_model"] = baseline_model
     dump_config["num_agents"] = num_agents
     dump_config["num_machines"] = num_machines
+    dump_config["script"] = script_path_for_config(__file__)
     with open(exp_config_path, 'w', encoding='utf-8') as f:
         json.dump(dump_config, f, indent=4)
 
@@ -132,11 +139,16 @@ if __name__ == "__main__":
         save_detectors_info = False,
         agent_parameters = {
             "new_machines_after_mutation": num_machines, 
-            "human_parameters" : {
-                "model" : human_model
+            "human_parameters": {
+                "model": human_model,
+                "alpha": human_alpha,
+                "beta": human_beta,
+                "beta_randomness": human_beta_randomness,
+                "deterministic": human_deterministic,
             },
             "machine_parameters" :{
                 "behavior" : av_behavior,
+                "observation_type" : observations
             }
         },
         environment_parameters = {
@@ -146,6 +158,7 @@ if __name__ == "__main__":
             "network_name" : network,
             "custom_network_folder" : custom_network_folder,
             "sumo_type" : "sumo",
+            "simulation_timesteps" : max_start_time
         }, 
         plotter_parameters = {
             "phases" : phases,
@@ -161,18 +174,12 @@ if __name__ == "__main__":
             "number_of_paths" : number_of_paths,
             "beta" : path_gen_beta,
             "num_samples" : num_samples,
+            "path_gen_workers" : path_gen_workers,
             "visualize_paths" : False
         } 
     )
 
-    print(f"""
-    Agents in the traffic:
-    • Total agents           : {len(env.all_agents)}
-    • Human agents           : {len(env.human_agents)}
-    • AV agents              : {len(env.machine_agents)}
-    """)
-
-    
+    print_agent_counts(env)
     env.start()
     res = env.reset()
 
@@ -186,13 +193,7 @@ if __name__ == "__main__":
     #  Mutation
     pre_mutation_agents = env.all_agents.copy()
     env.mutation(disable_human_learning = not should_humans_adapt, mutation_start_percentile = -1)
-
-    print(f"""
-    Agents in the traffic:
-    • Total agents           : {len(env.all_agents)}
-    • Human agents           : {len(env.human_agents)}
-    • AV agents              : {len(env.machine_agents)}
-    """)
+    print_agent_counts(env)
 
     # Replace AV models with baseline models
     machines = env.machine_agents.copy()
@@ -251,3 +252,4 @@ if __name__ == "__main__":
     env.stop_simulation()
 
     clear_SUMO_files(os.path.join(records_folder, "SUMO_output"), os.path.join(records_folder, "episodes"), remove_additional_files=True)
+    run_metrics_analysis(exp_id, results_folder="../results")

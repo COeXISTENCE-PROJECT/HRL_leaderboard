@@ -33,6 +33,8 @@ class CSVLossLogger:
 
 
 
+import torch
+import torch.nn as nn
 
 def get_episodes(ep_path: str) -> list[int]:
     """Get the episodes data
@@ -166,6 +168,48 @@ def save_loss_records(records_folder: str, loss_records: list[dict], columns: li
             writer.writerow({column: row.get(column, "") for column in columns})
 
     return os.path.abspath(loss_csv_path)
+
+
+class AppendODEmbedding(nn.Module):
+    """
+    Append a learned OD embedding to each agent observation.
+
+    The OD ids are fixed for a given experiment and must follow the same order as
+    the TorchRL group of machine agents.
+    """
+
+    def __init__(self, od_ids: list[int], num_od_pairs: int, embedding_dim: int):
+        super().__init__()
+        self.embedding = nn.Embedding(num_od_pairs, embedding_dim)
+        self.register_buffer("od_ids", torch.as_tensor(od_ids, dtype=torch.long))
+
+    def forward(self, observation: torch.Tensor) -> torch.Tensor:
+        # observation has shape [..., n_agents, obs_dim]
+        batch_shape = observation.shape[:-2]
+        od_ids = self.od_ids
+
+        if batch_shape:
+            od_ids = od_ids.view(*([1] * len(batch_shape)), *od_ids.shape)
+            od_ids = od_ids.expand(*batch_shape, *self.od_ids.shape)
+
+        od_embedding = self.embedding(od_ids)
+        return torch.cat([observation, od_embedding], dim=-1)
+
+
+def get_od_ids_for_group(group_agent_ids: list[str], machine_agents: list, num_destinations: int) -> list[int]:
+    """
+    Build OD ids in the exact order used by the TorchRL group.
+
+    Each OD pair is mapped to one integer:
+        od_id = origin * num_destinations + destination
+    """
+
+    machine_by_id = {str(machine.id): machine for machine in machine_agents}
+    od_ids = []
+    for agent_id in group_agent_ids:
+        machine = machine_by_id[agent_id]
+        od_ids.append(int(machine.origin) * num_destinations + int(machine.destination))
+    return od_ids
 
 
 def script_path_for_config(script_file: str, repo_root: Optional[str] = None) -> str:

@@ -25,6 +25,9 @@ from baseline_models import BaseLearningModel
 from iql             import Network
 from utils           import clear_SUMO_files
 from utils           import print_agent_counts
+from utils           import run_metrics_analysis
+from utils           import save_loss_records
+from utils           import script_path_for_config
 
 ### A simplified single-step actor-only PPO implementation for single-step decisions.
 class PPO(BaseLearningModel):
@@ -212,7 +215,7 @@ if __name__ == "__main__":
     dump_config["env_config"] = env_config
     dump_config["task_config"] = task_config
     dump_config["alg_config"] = alg_config
-    dump_config["script"] = os.path.abspath(__file__)
+    dump_config["script"] = script_path_for_config(__file__)
     dump_config["algorithm"] = ALGORITHM
     dump_config["num_agents"] = num_agents
     dump_config["num_machines"] = num_machines
@@ -228,12 +231,16 @@ if __name__ == "__main__":
         save_detectors_info = False,
         agent_parameters = {
             "new_machines_after_mutation": num_machines, 
-            "human_parameters" : {
-                "model" : human_model
+            "human_parameters": {
+                "model": human_model,
+                "alpha": human_alpha,
+                "beta": human_beta,
+                "beta_randomness": human_beta_randomness,
+                "deterministic": human_deterministic,
             },
             "machine_parameters" : {
                 "behavior" : av_behavior,
-                "observation_type" : "previous_agents_plus_start_time"
+                "observation_type" : observations
             }
         },
         environment_parameters = {
@@ -259,6 +266,7 @@ if __name__ == "__main__":
             "number_of_paths" : number_of_paths,
             "beta" : path_gen_beta,
             "num_samples" : num_samples,
+            "path_gen_workers" : path_gen_workers,
             "visualize_paths" : False
         } 
     )
@@ -332,7 +340,22 @@ if __name__ == "__main__":
     # Finalize the experiment
     pbar.close()
     env.plot_results()
-    losses_pd = pd.DataFrame([{"id": agent.id, "losses": agent.model.loss} for agent in env.machine_agents])
-    losses_pd.to_csv(os.path.join(records_folder, "losses.csv"), index=False)
+    loss_records = []
+    for agent in env.machine_agents:
+        for iteration, loss_value in enumerate(agent.model.loss, start=1):
+            loss_records.append(
+                {
+                    "iteration": iteration,
+                    "agent_id": agent.id,
+                    "loss": loss_value,
+                }
+            )
+    save_loss_records(
+        records_folder,
+        loss_records,
+        columns=["iteration", "agent_id", "loss"],
+    )
+
     env.stop_simulation()
     clear_SUMO_files(os.path.join(records_folder, "SUMO_output"), os.path.join(records_folder, "episodes"), remove_additional_files=True)
+    run_metrics_analysis(exp_id, results_folder="../results")

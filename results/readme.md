@@ -69,15 +69,15 @@ All plots correspond to *Scenario 1* (40% AV) with $environment$ $seed = 42$.<br
 <table>
   <tr>
     <td align="center">
-      <img src="./docs/figures/travel_times_greedy_provins_seed42.png" width="260"><br>
+      <img src="../docs/greedy_results/travel_times_greedy_provins_seed42.png" width="260"><br>
       <sub>Scenario 1, Saint Arnoult, Greedy baseline</sub>
     </td>
     <td align="center">
-      <img src="./docs/figures/travel_times_greedy_provins_seed42.png" width="260"><br>
+      <img src="../docs/greedy_results/travel_times_greedy_provins_seed42.png" width="260"><br>
       <sub>Scenario 1, Provins, Greedy baseline</sub>
     </td>
     <td align="center">
-      <img src="./docs/figures/travel_times_greedy_ingolstadt_seed42.png" width="260"><br>
+      <img src="../docs/greedy_results/travel_times_greedy_ingolstadt_seed42.png" width="260"><br>
       <sub>Scenario 1, Ingolstadt, Greedy baseline</sub>
     </td>
   </tr>

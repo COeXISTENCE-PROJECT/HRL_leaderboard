@@ -4,6 +4,7 @@ The VDN implementation is based on: https://github.com/pytorch/rl/blob/main/sota
 """
 
 import os
+
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
     
 import argparse
@@ -11,7 +12,6 @@ import ast
 import json
 import logging
 
-import matplotlib.pyplot as plt
 import pandas as pd
 import torch
 
@@ -20,9 +20,7 @@ from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 from torchrl.collectors import SyncDataCollector
 from torchrl.envs.libs.pettingzoo import PettingZooWrapper
-from torchrl.envs.utils import check_env_specs
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
-from torchrl._utils import logger as torchrl_logger
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs import RewardSum, TransformedEnv
@@ -32,7 +30,13 @@ from torchrl.objectives import SoftUpdate, ValueEstimators
 from torchrl.objectives.multiagent.qmixer import QMixerLoss
 from tqdm import tqdm
 
+from utils import AppendODEmbedding
 from utils import clear_SUMO_files
+from utils import get_od_ids_for_group
+from utils import print_agent_counts
+from utils import run_metrics_analysis
+from utils import save_loss_records
+from utils import script_path_for_config
 
 
 if __name__ == "__main__":
@@ -91,12 +95,10 @@ if __name__ == "__main__":
     params.update(task_params)
     del params["desc"], alg_params, env_params, task_params
 
-    
     # set params as variables in this script
     for key, value in params.items():
         globals()[key] = value
 
-    
     custom_network_folder = f"../networks/{network}"
     records_folder = f"../results/{exp_id}"
     plots_folder = f"../results/{exp_id}/plots"
@@ -120,6 +122,9 @@ if __name__ == "__main__":
             content = f.read()
         with open(new_agents_csv_path, 'w', encoding='utf-8') as f:
             f.write(content)
+        max_start_time = pd.read_csv(new_agents_csv_path)['start_time'].max()
+    else:
+        raise FileNotFoundError(f"Agents CSV file not found at {agents_csv_path}. Please check the network folder.")
             
     num_machines = int(num_agents * ratio_machines)
     training_episodes = agent_frames_per_batch * n_iters
@@ -140,6 +145,7 @@ if __name__ == "__main__":
     dump_config["num_agents"] = num_agents
     dump_config["num_machines"] = num_machines
     dump_config["algorithm"] = ALGORITHM
+    dump_config["script"] = script_path_for_config(__file__)
     with open(exp_config_path, 'w', encoding='utf-8') as f:
         json.dump(dump_config, f, indent=4)
 
@@ -151,17 +157,23 @@ if __name__ == "__main__":
         save_detectors_info = False,
         agent_parameters = {
             "new_machines_after_mutation": num_machines, 
-            "human_parameters" : {
-                "model" : human_model
+            "human_parameters": {
+                "model": human_model,
+                "alpha": human_alpha,
+                "beta": human_beta,
+                "beta_randomness": human_beta_randomness,
+                "deterministic": human_deterministic,
             },
             "machine_parameters" :{
                 "behavior" : av_behavior,
+                "observation_type" : observations
             }
         },
         simulator_parameters = {
             "network_name" : network,
             "custom_network_folder" : custom_network_folder,
             "sumo_type" : "sumo",
+            "simulation_timesteps" : max_start_time
         }, 
         environment_parameters = {
             "save_every" : save_every,
@@ -180,17 +192,12 @@ if __name__ == "__main__":
             "number_of_paths" : number_of_paths,
             "beta" : path_gen_beta,
             "num_samples" : num_samples,
+            "path_gen_workers" : path_gen_workers,
             "visualize_paths" : False
         } 
     )
 
-    print(f"""
-    Agents in the traffic:
-    • Total agents           : {len(env.all_agents)}
-    • Human agents           : {len(env.human_agents)}
-    • AV agents              : {len(env.machine_agents)}
-    """)
-    
+    print_agent_counts(env)
     env.start()
     env.reset()
 
@@ -203,16 +210,14 @@ if __name__ == "__main__":
     
     #  Mutation
     env.mutation(disable_human_learning = not should_humans_adapt, mutation_start_percentile = -1)
-    
-    print(f"""
-    Agents in the traffic:
-    • Total agents           : {len(env.all_agents)}
-    • Human agents           : {len(env.human_agents)}
-    • AV agents              : {len(env.machine_agents)}
-    """)
+    print_agent_counts(env)
     
     
-    group = {'agents': [str(machine.id) for machine in env.machine_agents]}
+    group_agent_ids = [str(machine.id) for machine in env.machine_agents]
+    group = {"agents": group_agent_ids}
+    # Keep OD ids aligned with the TorchRL group order.
+    od_ids = get_od_ids_for_group(group_agent_ids, env.machine_agents, len(destinations))
+    num_od_pairs = len(origins) * len(destinations)
 
     env = PettingZooWrapper(
         env=env,
@@ -229,18 +234,27 @@ if __name__ == "__main__":
         env,
         RewardSum(in_keys=[env.reward_key], out_keys=[("agents", "episode_reward")]),
     )
-    check_env_specs(env)
+    
     env.reset()
+
+    obs_dim = env.observation_spec["agents", "observation"].shape[-1]
+    obs_with_od_dim = obs_dim + od_embedding_dim
+    # Append a learned OD embedding before the Q-network.
+    od_encoder = TensorDictModule(
+        AppendODEmbedding(od_ids, num_od_pairs, od_embedding_dim).to(device),
+        in_keys=[("agents", "observation")],
+        out_keys=[("agents", "observation_with_od")],
+    )
 
      
     # Policy network
     # Instantiate an `MPL` that can be used in multi-agent contexts.
     net = MultiAgentMLP(
-            n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
+            n_agent_inputs=obs_with_od_dim,
             n_agent_outputs=env.action_spec.space.n,
             n_agents=env.n_agents,
             centralised=False,
-            share_params=share_params,
+            share_params=share_params_agent,
             device=device,
             depth=mlp_depth,
             num_cells=mlp_cells,
@@ -249,7 +263,7 @@ if __name__ == "__main__":
 
     
     module = TensorDictModule(
-            net, in_keys=[("agents", "observation")], out_keys=[("agents", "action_value")]
+            net, in_keys=[("agents", "observation_with_od")], out_keys=[("agents", "action_value")]
     )
 
     value_module = QValueModule(
@@ -263,7 +277,7 @@ if __name__ == "__main__":
         action_space=None,
     )
 
-    qnet = SafeSequential(module, value_module)
+    qnet = SafeSequential(od_encoder, module, value_module)
     
     qnet_explore = TensorDictSequential(
         qnet,
@@ -322,9 +336,7 @@ if __name__ == "__main__":
 
      
     # Training loop
-    loss_values_path = os.path.join(records_folder, "losses/loss_values.txt")
-    os.makedirs(os.path.dirname(loss_values_path), exist_ok=True)
-    open(loss_values_path, 'w').close()
+    loss_records = []
     
     pbar = tqdm(total=n_iters, desc="Training")
     for tensordict_data in collector:
@@ -365,8 +377,12 @@ if __name__ == "__main__":
 
         if step_loss_values:
             loss = sum(step_loss_values) / len(step_loss_values)
-            with open(loss_values_path, 'a') as f:
-                f.write("%s\n" % loss)
+            loss_records.append(
+                {
+                    "iteration": len(loss_records) + 1,
+                    "loss": loss,
+                }
+            )
         qnet_explore[1].step(frames=current_frames)  # Update exploration annealing
         collector.update_policy_weights_()
         pbar.update()
@@ -376,37 +392,23 @@ if __name__ == "__main__":
 
     # Testing phase
     pbar = tqdm(total=test_eps, desc="Testing")
-    qnet.eval() # set the policy into evaluation mode
+    qnet_explore.eval() # keep epsilon-greedy behavior in evaluation
+    qnet_explore[1].eps.data.copy_(qnet_explore[1].eps_end)
     for episode in range(test_eps):
-        env.rollout(len(env.machine_agents), policy=qnet)
+        env.rollout(len(env.machine_agents), policy=qnet_explore)
         pbar.update()
     pbar.close()
         
     # Visualize results
     os.makedirs(plots_folder, exist_ok=True)
     env.plot_results()
-    
-    # Visualize losses
-    loss_values = list()
-    with open(loss_values_path, 'r') as f:
-        for line in f:
-            loss_values.append(float(line.strip()))
-    colors = [
-        "firebrick", "teal", "peru", "navy", 
-        "salmon", "slategray", "darkviolet", 
-        "lightskyblue", "darkolivegreen", "black"]
-    plt.figure(figsize=(12, 6))
-    plt.plot(loss_values, label='loss_values', color=colors[0], linewidth=3)
-    plt.xlabel('Iteration', fontsize=14)
-    plt.ylabel('Loss', fontsize=14)
-    plt.xticks(fontsize=14)
-    plt.yticks(fontsize=14)
-    plt.title('Loss', fontsize=18, fontweight='bold')
-    plt.grid(True, axis='y')
-    plt.tight_layout()
-    plt.savefig(os.path.join(plots_folder, 'losses.png'), dpi=300)
-    plt.close()
+    save_loss_records(
+        records_folder,
+        loss_records,
+        columns=["iteration", "loss"],
+    )
 
     env.stop_simulation()
 
     clear_SUMO_files(os.path.join(records_folder, "SUMO_output"), os.path.join(records_folder, "episodes"), remove_additional_files=True)
+    run_metrics_analysis(exp_id, results_folder="../results")

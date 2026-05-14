@@ -15,6 +15,12 @@ Moreover, we have two independent algorithms with our custom implementations:
 
 You can tune, adjust, hyperparameterize and modify all the provided implementations, or create own scripts.
 
+### Output conventions
+
+- At the end of each experiment script, metrics are automatically computed by calling `analysis/metrics.py`.
+- For learning-based scripts, training losses are saved in a unified CSV file:
+  `results/<exp_id>/losses/losses.csv`
+
 ### Baselines
 
 In addition to RL algorithms, we provide baseline algorithms for comparison.
@@ -28,5 +34,4 @@ The options consist of:
 | `aon`    | Deterministically picks the shortest free-flow route regardless of congestion. | `baseline_models/` | Run via `scripts/baselines.py` with `--model aon` | Included in URB
 | `random` | Fully undeterministic. | `baseline_models/` |     Run via `scripts/baselines.py` with  `--model random` | Included in URB |
 | `gawron` | Human learning model based on [Gawron (1998)](https://kups.ub.uni-koeln.de/9257/); iteratively shifts cost expectations toward received rewards. | `baseline_models/` | Run via `scripts/baselines.py` with `--model gawron` | [RouteRL](https://github.com/COeXISTENCE-PROJECT/RouteRL/blob/993423d101f39ea67a1f7373e6856af95a0602d4/routerl/human_learning/learning_model.py#L42) |
-
 
