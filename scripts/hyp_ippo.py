@@ -10,7 +10,6 @@ import ast
 import json
 import logging
 import random
-import optuna
 
 import numpy as np
 import pandas as pd
@@ -22,7 +21,10 @@ from routerl import TrafficEnvironment
 from tqdm import tqdm
 
 from baseline_models import BaseLearningModel
-from utils import clear_SUMO_files, print_agent_counts
+from utils           import clear_SUMO_files
+from utils           import print_agent_counts
+from utils           import run_metrics_analysis
+from utils           import script_path_for_config
 
 class AgentFeatureEmbedder(nn.Module):
     def __init__(self, agents_df, embed_dim, device="cpu"):
@@ -335,10 +337,13 @@ if __name__ == "__main__":
         "network": network,
         "env_seed": env_seed,
         "torch_seed": torch_seed,
+        "env_config": env_config,
+        "task_config": task_config,
+        "alg_config": alg_config,
         "algorithm": ALGORITHM,
         "num_agents": num_agents,
         "num_machines": num_machines,
-        "script": os.path.abspath(__file__)
+        "script": script_path_for_config(__file__)
     })
 
     with open(os.path.join(records_folder, "exp_config.json"), "w") as f:
@@ -351,10 +356,16 @@ if __name__ == "__main__":
         save_detectors_info=False,
         agent_parameters={
             "new_machines_after_mutation": num_machines,
-            "human_parameters": {"model": human_model},
+            "human_parameters": {
+                "model": human_model,
+                "alpha": human_alpha,
+                "beta": human_beta,
+                "beta_randomness": human_beta_randomness,
+                "deterministic": human_deterministic,
+            },
             "machine_parameters": {
                 "behavior": av_behavior,
-                "observation_type": "previous_agents_plus_start_time"
+                "observation_type" : observations
             }
         },
         environment_parameters={"save_every": save_every},
@@ -378,6 +389,7 @@ if __name__ == "__main__":
             "number_of_paths": number_of_paths,
             "beta": path_gen_beta,
             "num_samples": num_samples,
+            "path_gen_workers" : path_gen_workers,
             "visualize_paths": False
         }
     )
@@ -401,7 +413,6 @@ if __name__ == "__main__":
     os.makedirs(models_folder, exist_ok=True)
 
     post_mutation_path = os.path.join(models_folder, "model_post_mutation.pth")
-    #env.machine_agents[0].model.save(post_mutation_path)
     print(f"Model zapisany po mutacji: {post_mutation_path}")
     
     obs_size = env.observation_space(env.possible_agents[0]).shape[0]
@@ -496,3 +507,4 @@ if __name__ == "__main__":
         os.path.join(records_folder, "episodes"),
         remove_additional_files=True
     )
+    run_metrics_analysis(exp_id, results_folder="../results")
