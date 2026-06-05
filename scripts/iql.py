@@ -221,7 +221,7 @@ if __name__ == "__main__":
     env = TrafficEnvironment(
         seed = env_seed,
         create_agents = False,
-        create_paths = False,
+        create_paths = True,
         save_detectors_info = False,
         agent_parameters = {
             "new_machines_after_mutation": num_machines, 
