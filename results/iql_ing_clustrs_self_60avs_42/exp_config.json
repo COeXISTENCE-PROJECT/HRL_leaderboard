@@ -34,7 +34,7 @@
     "human_deterministic": false,
     "network": "ingolstadt_custom2",
     "env_seed": 44,
-    "torch_seed": 43,
+    "torch_seed": 42,
     "env_config": "clusters_eta",
     "task_config": "selfish_60",
     "alg_config": "config3_longer",
