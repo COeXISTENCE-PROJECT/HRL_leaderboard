@@ -34,7 +34,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
-import wandb
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -436,12 +435,6 @@ if __name__ == "__main__":
     with open(exp_config_path, "w", encoding="utf-8") as f:
         json.dump(dump_config, f, indent=4)
 
-    wandb.init(
-        entity="mk-hrl",
-        project="sandbox",
-        name=exp_id,
-        config=dump_config,
-    )
 
     env = TrafficEnvironment(
         seed=env_seed,
@@ -582,8 +575,7 @@ if __name__ == "__main__":
                     "training/loss": float(np.mean(episode_losses)),
                 }
             )
-        wandb.log(log_data, step=human_learning_episodes + episode)
-
+        
         if episode % plot_every == 0:
             env.plot_results()
         pbar.update()
@@ -614,16 +606,6 @@ if __name__ == "__main__":
                 action = agent_lookup[agent_id].model.act(observation)
             env.step(action)
 
-        wandb.log(
-            {
-                "episode": human_learning_episodes + training_eps + episode,
-                "testing/reward_sum": float(np.sum(episode_rewards)),
-                "testing/reward_mean": float(np.mean(episode_rewards)),
-                "testing/travel_time_mean": float(np.mean(episode_travel_times)),
-                "testing/travel_time_sum": float(np.sum(episode_travel_times)),
-            },
-            step=human_learning_episodes + training_eps + episode,
-        )
 
         pbar.update()
 
@@ -656,15 +638,3 @@ if __name__ == "__main__":
     )
     run_metrics_analysis(exp_id, results_folder="../results")
     
-    rewards_path = os.path.join(plots_folder, "rewards.png")
-    travel_times_path = os.path.join(plots_folder, "travel_times.png")
-    plots_to_log = {}
-    if os.path.exists(rewards_path):
-        plots_to_log["Plots/Rewards"] = wandb.Image(rewards_path)
-    if os.path.exists(travel_times_path):
-        plots_to_log["Plots/Travel_Times"] = wandb.Image(travel_times_path)
-    
-    if plots_to_log:
-        wandb.log(plots_to_log)
-        
-    wandb.finish()
