@@ -1,10 +1,10 @@
 {
-    "training_eps": 5,
+    "training_eps": 10,
     "desc": "Initial feudal HRL config: discrete manager over route families and PPO-style worker updates.",
     "manager_period": 1,
     "use_cluster_embedding": true,
     "cluster_source": "k_prototypes",
-    "cluster_csv_path": "networks/saint_arnoult/clusters/agents_clustered_k_prototypes_weighted_mse.csv",
+    "cluster_csv_path": "clustering_ideas/provins_clustering/agents_clustered_k_prototypes_weighted_mse.csv",
     "cluster_key_columns": ["start_time", "origin", "destination"],
     "num_subgoals": 4,
     "num_clusters": 0,
